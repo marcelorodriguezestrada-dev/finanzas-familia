@@ -178,11 +178,9 @@ export default function MovimientosPage() {
             <div className={`font-body text-sm font-semibold ${m.tipo === 'ingreso' ? 'text-verde' : 'text-rojo'}`}>
               {m.tipo === 'ingreso' ? '+' : '-'}{bs(m.monto)}
             </div>
-            {(perfil?.rol === 'admin' || m.registradoPor === usuario?.uid) && (
-              <button onClick={() => borrar(m.id)} className="font-body text-[11px] text-rojo underline">
-                Borrar
-              </button>
-            )}
+            <button onClick={() => borrar(m.id)} className="font-body text-[11px] text-rojo underline">
+              Borrar
+            </button>
           </div>
         </div>
       ))}

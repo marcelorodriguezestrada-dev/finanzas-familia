@@ -34,16 +34,14 @@ export function Header() {
               {l.label}
             </Link>
           ))}
-          {perfil?.rol === 'admin' && (
-            <Link
-              href="/familia"
-              className={`px-2.5 py-1.5 rounded-md font-body text-[13px] whitespace-nowrap ${
-                pathname === '/familia' ? 'bg-white/15 text-white font-semibold' : 'text-white/70'
-              }`}
-            >
-              Familia
-            </Link>
-          )}
+          <Link
+            href="/familia"
+            className={`px-2.5 py-1.5 rounded-md font-body text-[13px] whitespace-nowrap ${
+              pathname === '/familia' ? 'bg-white/15 text-white font-semibold' : 'text-white/70'
+            }`}
+          >
+            Familia
+          </Link>
         </div>
         <div className="ml-auto flex items-center gap-2 shrink-0">
           {perfil && <span className="font-body text-[12px] text-white/60 hidden sm:inline">{perfil.nombre}</span>}

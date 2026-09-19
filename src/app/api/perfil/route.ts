@@ -14,11 +14,8 @@ export async function GET(req: NextRequest) {
 }
 
 // POST { nombre } — se llama una sola vez, justo después de crear la
-// cuenta. La PRIMERA persona que se registra en toda la app queda
-// admin automático (así alguien de la familia puede empezar a usarla
-// sin depender de que ya exista un admin previo). El resto entra
-// directo como "miembro" ya aprobado -- es una app familiar, no hace
-// falta que un admin apruebe a cada uno a mano antes de poder usarla.
+// cuenta. Ya no hay aprobación ni roles: cualquiera que se registre
+// entra con acceso completo desde el primer momento.
 export async function POST(req: NextRequest) {
   const usuario = await getUsuarioDesdeRequest(req)
   if (!usuario) return NextResponse.json({ error: 'Necesitás iniciar sesión.' }, { status: 401 })
@@ -30,13 +27,10 @@ export async function POST(req: NextRequest) {
     if (yaExiste.exists) return NextResponse.json({ perfil: yaExiste.data() })
 
     const { nombre } = await req.json()
-    const totalPerfiles = await db.collection('perfiles').count().get()
-    const esPrimero = totalPerfiles.data().count === 0
-
     const perfil = {
       nombre: (nombre || usuario.email || 'Sin nombre').trim(),
       email: usuario.email,
-      rol: esPrimero ? 'admin' : 'miembro',
+      rol: 'miembro' as const,
       aprobado: true,
       creadoEn: new Date().toISOString(),
     }

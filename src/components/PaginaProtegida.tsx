@@ -4,8 +4,8 @@ import Link from 'next/link'
 import { useAuth } from '@/lib/auth'
 import { Header } from './Header'
 
-export function PaginaProtegida({ children, soloAdmin = false }: { children: React.ReactNode; soloAdmin?: boolean }) {
-  const { usuario, perfil, cargando } = useAuth()
+export function PaginaProtegida({ children }: { children: React.ReactNode }) {
+  const { usuario, cargando } = useAuth()
 
   if (cargando) {
     return <div className="max-w-[480px] mx-auto px-5 py-20 text-center font-body text-sm text-inksoft">Cargando...</div>
@@ -19,25 +19,6 @@ export function PaginaProtegida({ children, soloAdmin = false }: { children: Rea
         <Link href="/login" className="inline-block px-4 py-2.5 rounded-lg bg-ink text-white font-body text-sm font-semibold">
           Ir al login
         </Link>
-      </div>
-    )
-  }
-
-  if (!perfil || !perfil.aprobado) {
-    return (
-      <div className="max-w-[420px] mx-auto px-5 py-20 text-center">
-        <div className="font-display text-xl font-bold text-ink mb-3">Esperando aprobación</div>
-        <div className="font-body text-sm text-inksoft">
-          Tu cuenta todavía no fue aprobada por un admin de la familia. Avisale para que te habilite desde la sección "Familia".
-        </div>
-      </div>
-    )
-  }
-
-  if (soloAdmin && perfil.rol !== 'admin') {
-    return (
-      <div className="max-w-[420px] mx-auto px-5 py-20 text-center">
-        <div className="font-body text-sm text-inksoft">Esta sección es solo para admins de la familia.</div>
       </div>
     )
   }

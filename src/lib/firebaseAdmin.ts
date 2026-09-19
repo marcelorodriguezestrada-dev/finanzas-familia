@@ -41,34 +41,28 @@ export async function getUsuarioDesdeRequest(req: NextRequest) {
 
 export type Perfil = {
   nombre: string
-  rol: 'admin' | 'miembro' | 'pendiente'
-  aprobado: boolean
+  rol: 'miembro'
+  aprobado: true
 }
 
-// Trae el perfil (rol, si está aprobado) de un uid. null si todavía no
-// se registró en /api/perfil.
+// Trae el perfil de un uid. null si todavía no se registró en /api/perfil.
 export async function getPerfil(uid: string): Promise<Perfil | null> {
   const doc = await getDb().collection('perfiles').doc(uid).get()
   if (!doc.exists) return null
   return doc.data() as Perfil
 }
 
-// Chequeo estándar que usan casi todos los endpoints: pide el token,
-// pide el perfil, y devuelve un error legible si falta algo. Lo
-// devuelve como {error, status} para que el endpoint solo tenga que
-// hacer `if ('error' in chequeo) return NextResponse.json(...)`.
+// Chequeo estándar que usan casi todos los endpoints: solo pide que
+// haya un token válido y un perfil creado — ya no hay aprobación ni
+// roles, cualquiera que se loguee tiene acceso completo.
 export async function requerirUsuarioAprobado(req: NextRequest) {
   const usuario = await getUsuarioDesdeRequest(req)
   if (!usuario) return { error: 'Necesitás iniciar sesión.', status: 401 as const }
   const perfil = await getPerfil(usuario.uid)
   if (!perfil) return { error: 'Todavía no completaste tu registro.', status: 403 as const }
-  if (!perfil.aprobado) return { error: 'Tu cuenta todavía no fue aprobada por un admin de la familia.', status: 403 as const }
   return { usuario, perfil }
 }
 
-export async function requerirAdmin(req: NextRequest) {
-  const chequeo = await requerirUsuarioAprobado(req)
-  if ('error' in chequeo) return chequeo
-  if (chequeo.perfil.rol !== 'admin') return { error: 'Esto solo lo puede hacer un admin.', status: 403 as const }
-  return chequeo
-}
+// Ya no existe el concepto de admin — queda como alias para no romper
+// los endpoints que lo llaman, con el mismo chequeo de arriba.
+export const requerirAdmin = requerirUsuarioAprobado

@@ -80,14 +80,12 @@ export default function PatrimonioPage() {
     <PaginaProtegida>
       <div className="flex items-center justify-between mb-6">
         <div className="font-display text-xl font-bold text-ink">Patrimonio</div>
-        {perfil?.rol === 'admin' && (
-          <button
-            onClick={() => setMostrarForm((v) => !v)}
-            className="px-3.5 py-2 rounded-lg border-none bg-ink text-white font-body text-xs font-semibold"
-          >
-            {mostrarForm ? 'Cancelar' : '+ Agregar ítem'}
-          </button>
-        )}
+        <button
+          onClick={() => setMostrarForm((v) => !v)}
+          className="px-3.5 py-2 rounded-lg border-none bg-ink text-white font-body text-xs font-semibold"
+        >
+          {mostrarForm ? 'Cancelar' : '+ Agregar ítem'}
+        </button>
       </div>
 
       <div className="grid grid-cols-3 gap-3 mb-6">
@@ -129,13 +127,13 @@ export default function PatrimonioPage() {
       <div className="font-body text-sm font-semibold text-ink mb-2">Activos</div>
       {activosItems.length === 0 && <div className="font-body text-xs text-inksoft mb-4">Sin activos cargados.</div>}
       {activosItems.map((i) => (
-        <ItemPatrimonio key={i.id} item={i} esAdmin={perfil?.rol === 'admin'} onBorrar={borrar} />
+        <ItemPatrimonio key={i.id} item={i} esAdmin={true} onBorrar={borrar} />
       ))}
 
       <div className="font-body text-sm font-semibold text-ink mb-2 mt-6">Deudas</div>
       {deudasItems.length === 0 && <div className="font-body text-xs text-inksoft">Sin deudas cargadas — ¡buenísimo!</div>}
       {deudasItems.map((i) => (
-        <ItemPatrimonio key={i.id} item={i} esAdmin={perfil?.rol === 'admin'} onBorrar={borrar} negativo />
+        <ItemPatrimonio key={i.id} item={i} esAdmin={true} onBorrar={borrar} negativo />
       ))}
     </PaginaProtegida>
   )

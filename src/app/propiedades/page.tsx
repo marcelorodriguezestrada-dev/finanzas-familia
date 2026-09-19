@@ -88,14 +88,12 @@ export default function PropiedadesPage() {
     <PaginaProtegida>
       <div className="flex items-center justify-between mb-6">
         <div className="font-display text-xl font-bold text-ink">Propiedades</div>
-        {perfil?.rol === 'admin' && (
-          <button
-            onClick={() => setMostrarForm((v) => !v)}
-            className="px-3.5 py-2 rounded-lg border-none bg-ink text-white font-body text-xs font-semibold"
-          >
-            {mostrarForm ? 'Cancelar' : '+ Agregar propiedad'}
-          </button>
-        )}
+        <button
+          onClick={() => setMostrarForm((v) => !v)}
+          className="px-3.5 py-2 rounded-lg border-none bg-ink text-white font-body text-xs font-semibold"
+        >
+          {mostrarForm ? 'Cancelar' : '+ Agregar propiedad'}
+        </button>
       </div>
 
       {mostrarForm && (

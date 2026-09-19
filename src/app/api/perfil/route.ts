@@ -14,11 +14,11 @@ export async function GET(req: NextRequest) {
 }
 
 // POST { nombre } — se llama una sola vez, justo después de crear la
-// cuenta. La PRIMERA persona que se registra en toda la app queda
-// admin automático (así alguien de la familia puede empezar a usarla
-// sin depender de que ya exista un admin previo); todos los que se
-// registran después quedan "pendiente" hasta que un admin los apruebe
-// desde /familia.
+// cuenta. Cualquiera que se registre entra aprobado directo, sin
+// esperar que un admin lo habilite. La PRIMERA persona que se registra
+// en toda la app además queda como admin automático (así alguien de la
+// familia puede empezar a usarla sin depender de que ya exista un admin
+// previo) — el resto entra como "miembro" normal.
 export async function POST(req: NextRequest) {
   const usuario = await getUsuarioDesdeRequest(req)
   if (!usuario) return NextResponse.json({ error: 'Necesitás iniciar sesión.' }, { status: 401 })
@@ -36,8 +36,8 @@ export async function POST(req: NextRequest) {
     const perfil = {
       nombre: (nombre || usuario.email || 'Sin nombre').trim(),
       email: usuario.email,
-      rol: esPrimero ? 'admin' : 'pendiente',
-      aprobado: esPrimero,
+      rol: esPrimero ? 'admin' : 'miembro',
+      aprobado: true,
       creadoEn: new Date().toISOString(),
     }
     await ref.set(perfil)

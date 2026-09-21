@@ -9,7 +9,12 @@ export async function GET(req: NextRequest) {
   const chequeo = await requerirUsuarioAprobado(req)
   if ('error' in chequeo) return NextResponse.json({ error: chequeo.error }, { status: chequeo.status })
 
-  const snap = await getDb().collection('perfiles').get()
-  const miembros = snap.docs.map((d) => ({ uid: d.id, ...d.data() }))
-  return NextResponse.json({ miembros })
+  try {
+    const snap = await getDb().collection('perfiles').get()
+    const miembros = snap.docs.map((d) => ({ uid: d.id, ...d.data() }))
+    return NextResponse.json({ miembros })
+  } catch (err: any) {
+    console.error('GET /api/familia', err)
+    return NextResponse.json({ error: err?.message || 'No se pudo leer la familia.' }, { status: 500 })
+  }
 }

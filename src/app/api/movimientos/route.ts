@@ -11,14 +11,19 @@ export async function GET(req: NextRequest) {
   const chequeo = await requerirUsuarioAprobado(req)
   if ('error' in chequeo) return NextResponse.json({ error: chequeo.error }, { status: chequeo.status })
 
-  const mes = req.nextUrl.searchParams.get('mes')
-  let query = getDb().collection('movimientos').orderBy('fecha', 'desc') as FirebaseFirestore.Query
-  if (mes) {
-    query = query.where('fecha', '>=', `${mes}-01`).where('fecha', '<=', `${mes}-31`)
+  try {
+    const mes = req.nextUrl.searchParams.get('mes')
+    let query = getDb().collection('movimientos').orderBy('fecha', 'desc') as FirebaseFirestore.Query
+    if (mes) {
+      query = query.where('fecha', '>=', `${mes}-01`).where('fecha', '<=', `${mes}-31`)
+    }
+    const snap = await query.get()
+    const movimientos = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+    return NextResponse.json({ movimientos })
+  } catch (err: any) {
+    console.error('GET /api/movimientos', err)
+    return NextResponse.json({ error: err?.message || 'No se pudieron leer los movimientos.' }, { status: 500 })
   }
-  const snap = await query.get()
-  const movimientos = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
-  return NextResponse.json({ movimientos })
 }
 
 // POST — cualquier miembro aprobado puede cargar un ingreso o gasto.

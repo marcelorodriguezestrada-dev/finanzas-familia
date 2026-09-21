@@ -7,9 +7,14 @@ export async function GET(req: NextRequest) {
   const chequeo = await requerirUsuarioAprobado(req)
   if ('error' in chequeo) return NextResponse.json({ error: chequeo.error }, { status: chequeo.status })
 
-  const snap = await getDb().collection('propiedades').orderBy('creadoEn', 'desc').get()
-  const propiedades = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
-  return NextResponse.json({ propiedades })
+  try {
+    const snap = await getDb().collection('propiedades').orderBy('creadoEn', 'desc').get()
+    const propiedades = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+    return NextResponse.json({ propiedades })
+  } catch (err: any) {
+    console.error('GET /api/propiedades', err)
+    return NextResponse.json({ error: err?.message || 'No se pudieron leer las propiedades.' }, { status: 500 })
+  }
 }
 
 export async function POST(req: NextRequest) {

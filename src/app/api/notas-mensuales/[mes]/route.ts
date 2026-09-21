@@ -7,8 +7,13 @@ export async function GET(req: NextRequest, { params }: { params: { mes: string 
   const chequeo = await requerirUsuarioAprobado(req)
   if ('error' in chequeo) return NextResponse.json({ error: chequeo.error }, { status: chequeo.status })
 
-  const doc = await getDb().collection('notasMensuales').doc(params.mes).get()
-  return NextResponse.json({ nota: doc.exists ? doc.data() : null })
+  try {
+    const doc = await getDb().collection('notasMensuales').doc(params.mes).get()
+    return NextResponse.json({ nota: doc.exists ? doc.data() : null })
+  } catch (err: any) {
+    console.error('GET /api/notas-mensuales', err)
+    return NextResponse.json({ error: err?.message || 'No se pudo leer la nota.' }, { status: 500 })
+  }
 }
 
 // POST { texto } — cualquier miembro aprobado puede dejar/actualizar
@@ -18,14 +23,19 @@ export async function POST(req: NextRequest, { params }: { params: { mes: string
   const chequeo = await requerirUsuarioAprobado(req)
   if ('error' in chequeo) return NextResponse.json({ error: chequeo.error }, { status: chequeo.status })
 
-  const { texto } = await req.json()
-  await getDb().collection('notasMensuales').doc(params.mes).set(
-    {
-      texto: texto || '',
-      actualizadoPor: chequeo.perfil.nombre,
-      actualizadoEn: new Date().toISOString(),
-    },
-    { merge: true }
-  )
-  return NextResponse.json({ ok: true })
+  try {
+    const { texto } = await req.json()
+    await getDb().collection('notasMensuales').doc(params.mes).set(
+      {
+        texto: texto || '',
+        actualizadoPor: chequeo.perfil.nombre,
+        actualizadoEn: new Date().toISOString(),
+      },
+      { merge: true }
+    )
+    return NextResponse.json({ ok: true })
+  } catch (err: any) {
+    console.error('POST /api/notas-mensuales', err)
+    return NextResponse.json({ error: err?.message || 'No se pudo guardar la nota.' }, { status: 500 })
+  }
 }

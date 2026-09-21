@@ -7,9 +7,14 @@ export async function GET(req: NextRequest) {
   const chequeo = await requerirUsuarioAprobado(req)
   if ('error' in chequeo) return NextResponse.json({ error: chequeo.error }, { status: chequeo.status })
 
-  const snap = await getDb().collection('patrimonio').orderBy('creadoEn', 'desc').get()
-  const items = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
-  return NextResponse.json({ items })
+  try {
+    const snap = await getDb().collection('patrimonio').orderBy('creadoEn', 'desc').get()
+    const items = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+    return NextResponse.json({ items })
+  } catch (err: any) {
+    console.error('GET /api/patrimonio', err)
+    return NextResponse.json({ error: err?.message || 'No se pudo leer el patrimonio.' }, { status: 500 })
+  }
 }
 
 export async function POST(req: NextRequest) {

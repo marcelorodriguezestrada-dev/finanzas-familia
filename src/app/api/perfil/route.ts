@@ -9,8 +9,13 @@ export const dynamic = 'force-dynamic'
 export async function GET(req: NextRequest) {
   const usuario = await getUsuarioDesdeRequest(req)
   if (!usuario) return NextResponse.json({ error: 'Necesitás iniciar sesión.' }, { status: 401 })
-  const doc = await getDb().collection('perfiles').doc(usuario.uid).get()
-  return NextResponse.json({ perfil: doc.exists ? doc.data() : null })
+  try {
+    const doc = await getDb().collection('perfiles').doc(usuario.uid).get()
+    return NextResponse.json({ perfil: doc.exists ? doc.data() : null })
+  } catch (err: any) {
+    console.error('GET /api/perfil', err)
+    return NextResponse.json({ error: err?.message || 'No se pudo leer el perfil.' }, { status: 500 })
+  }
 }
 
 // POST { nombre } — se llama una sola vez, justo después de crear la

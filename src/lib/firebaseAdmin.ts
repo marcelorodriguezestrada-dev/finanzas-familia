@@ -58,9 +58,20 @@ export async function getPerfil(uid: string): Promise<Perfil | null> {
 export async function requerirUsuarioAprobado(req: NextRequest) {
   const usuario = await getUsuarioDesdeRequest(req)
   if (!usuario) return { error: 'Necesitás iniciar sesión.', status: 401 as const }
-  const perfil = await getPerfil(usuario.uid)
-  if (!perfil) return { error: 'Todavía no completaste tu registro.', status: 403 as const }
-  return { usuario, perfil }
+  try {
+    const perfil = await getPerfil(usuario.uid)
+    if (!perfil) return { error: 'Todavía no completaste tu registro.', status: 403 as const }
+    return { usuario, perfil }
+  } catch (err: any) {
+    // Esto se ejecuta ANTES del try/catch de cada endpoint, así que si
+    // Firestore falla acá (credenciales mal cargadas en Vercel, base de
+    // datos no creada todavía, etc.) el endpoint devolvía un 500 con
+    // cuerpo vacío — y el navegador tiraba "Unexpected end of JSON
+    // input", que no dice nada del problema real. Ahora devuelve el
+    // mensaje de Firebase tal cual, que sí explica qué pasa.
+    console.error('requerirUsuarioAprobado — falló Firestore', err)
+    return { error: `Error de base de datos: ${err?.message || 'desconocido'}`, status: 500 as const }
+  }
 }
 
 // Ya no existe el concepto de admin — queda como alias para no romper

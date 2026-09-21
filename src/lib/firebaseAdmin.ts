@@ -5,13 +5,29 @@ import { NextRequest } from 'next/server'
 
 function getApp(): App {
   if (getApps().length) return getApps()[0]
+
+  // La clave privada es lo que más se rompe al pasarla a Vercel, por
+  // dos motivos distintos:
+  // 1. Si se copia del JSON con las comillas incluidas, esas comillas
+  //    quedan DENTRO del valor y la clave deja de ser válida.
+  // 2. En el .env local viene con \n literales (dos caracteres), pero
+  //    si se pega en el panel de Vercel con saltos de línea de verdad,
+  //    ya vienen bien y no hay que tocar nada.
+  // Esto contempla los dos casos para que no dependa de cómo se pegó.
+  let privateKey = (process.env.FIREBASE_PRIVATE_KEY || '').trim()
+  if (
+    (privateKey.startsWith('"') && privateKey.endsWith('"')) ||
+    (privateKey.startsWith("'") && privateKey.endsWith("'"))
+  ) {
+    privateKey = privateKey.slice(1, -1)
+  }
+  privateKey = privateKey.replace(/\\n/g, '\n')
+
   return initializeApp({
     credential: cert({
       projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      // En .env la clave viene con \n literales — hay que convertirlos
-      // a saltos de línea de verdad o Firebase rechaza la credencial.
-      privateKey: (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
+      clientEmail: (process.env.FIREBASE_CLIENT_EMAIL || '').trim(),
+      privateKey,
     }),
   })
 }

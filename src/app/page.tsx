@@ -82,6 +82,15 @@ export default function ResumenPage() {
             <Link href="/propiedades" className="px-4 py-2.5 rounded-lg border border-line font-body text-sm text-ink">
               Ver propiedades
             </Link>
+            <Link href="/alquileres" className="px-4 py-2.5 rounded-lg border border-line font-body text-sm text-ink">
+              Alquileres
+            </Link>
+            <Link href="/dashboard" className="px-4 py-2.5 rounded-lg border border-line font-body text-sm text-ink">
+              Dashboard / Fondo de inversión
+            </Link>
+            <Link href="/calendario" className="px-4 py-2.5 rounded-lg border border-line font-body text-sm text-ink">
+              Calendario y alertas
+            </Link>
             <Link href="/balance" className="px-4 py-2.5 rounded-lg border border-line font-body text-sm text-ink">
               Balance mensual detallado
             </Link>

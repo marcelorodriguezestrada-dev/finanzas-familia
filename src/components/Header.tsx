@@ -8,6 +8,10 @@ const LINKS = [
   { href: '/', label: 'Resumen' },
   { href: '/movimientos', label: 'Ingresos y gastos' },
   { href: '/propiedades', label: 'Propiedades' },
+  { href: '/alquileres', label: 'Alquileres' },
+  { href: '/dashboard', label: 'Dashboard' },
+  { href: '/calendario', label: 'Calendario' },
+  { href: '/administracion', label: 'Fee admin.' },
   { href: '/patrimonio', label: 'Patrimonio' },
   { href: '/balance', label: 'Balance mensual' },
 ]

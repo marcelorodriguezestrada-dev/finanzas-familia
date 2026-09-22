@@ -1,14 +1,24 @@
 # Finanzas de la Familia
 
-App privada para llevar las finanzas de la familia entre varias personas: alquileres que cobran, gastos, ingresos y patrimonio, con balance mensual.
+App privada para llevar las finanzas de la familia entre varias personas: registro e inventario de inmuebles, alquileres, contratos, gastos, ingresos y patrimonio, con dashboard y balance mensual.
 
 ## Cómo funciona
 
-- **Roles**: la primera persona que se registra queda **admin** automático. Todos los que se registran después quedan **pendientes** hasta que un admin los aprueba desde la pestaña "Familia" (ahí también se puede asignar quién más es admin).
-- **Admin** puede: cargar/editar/borrar propiedades, patrimonio, aprobar gente nueva, y editar o borrar cualquier movimiento.
-- **Miembro** puede: cargar ingresos y gastos, ver todo (transparencia total entre la familia), y editar/borrar solo sus propios movimientos.
-- **Propiedades**: cada una tiene un alquiler mensual configurado; el botón "Marcar alquiler de este mes como cobrado" carga el ingreso solo, sin tener que tipearlo a mano.
-- **Balance mensual**: elegís el mes y ves ingresos/gastos por categoría, más una nota de texto libre para dejar comentarios (por ejemplo, por qué se gastó de más ese mes).
+- **Acceso**: cualquiera que se registre y complete su perfil tiene acceso completo — es una app familiar chica, pensada para transparencia total entre todos (todos ven todos los movimientos).
+- **Propiedades y unidades** (`/propiedades`): cada casa familiar se carga una vez y se desglosa en departamentos o habitaciones independientes (unidades). Cada unidad tiene su propia ficha: tipo de ambiente, comodidades (cocina, baño privado, amoblado, etc.), canon de alquiler estándar recomendado, y su propio historial de reparaciones pendientes/resueltas. Las reparaciones de la casa entera (techo, portón) se cargan a nivel propiedad, sin unidad asociada.
+- **Alquileres** (`/alquileres`): se asigna un inquilino a una unidad puntual, con sus datos (nombre, C.I., teléfono), el monto acordado y quién de la familia administra ese espacio. Si el monto difiere del canon estándar de la unidad, el sistema lo marca como variación (a favor o en contra) y queda guardado en el registro. Es obligatorio adjuntar el contrato firmado (imagen o PDF) para poder registrar el alquiler — sin eso no se guarda. El botón "Marcar cobrado este mes" carga el ingreso automáticamente.
+- **Generador de contratos**: desde el formulario de alquiler, el botón "Generar contrato automáticamente" arma un PDF con los datos del inquilino y las condiciones pactadas, listo para descargar, imprimir y firmar. Después el contrato ya firmado se sube aparte para quedar archivado.
+- **Dashboard** (`/dashboard`): balance por propiedad y por persona, evolución mensual de ingresos/gastos, y el **Fondo de Inversión** — el acumulado histórico disponible para reinvertir, graficado mes a mes.
+- **Calendario y alertas** (`/calendario`): quién está en mora este mes, próximos cobros de los siguientes 7 días, contratos por vencer en 60 días, y el listado de reparaciones pendientes (las notas/pedidos de los inquilinos durante el arrendamiento).
+- **Fee de administración** (`/administracion`): una vez al año (en la reunión familiar), se calcula el 5% sobre el total administrado por cada persona (según los alquileres que gestiona), y queda como liquidación marcable como pagada.
+- **Balance mensual** (`/balance`): elegís el mes y ves ingresos/gastos por categoría — los gastos de mantenimiento cargados al resolver una reparación quedan reflejados acá, descontados del análisis. Incluye una nota de texto libre para comentarios del mes.
+
+## Servicios externos que usa
+
+- **Firebase** (Auth + Firestore): login y base de datos.
+- **ImgBB**: aloja fotos (comprobantes, contratos escaneados como imagen).
+- **Supabase Storage**: aloja PDFs (contratos firmados que ya son PDF, comprobantes en PDF). Hace falta crear un bucket público llamado `contratos` desde el dashboard de Supabase.
+- El generador de contratos arma el PDF en el propio servidor (con `pdf-lib`), no depende de ningún servicio externo.
 
 ## Puesta en marcha
 
@@ -17,8 +27,10 @@ App privada para llevar las finanzas de la familia entre varias personas: alquil
    - Activar **Authentication** → método Email/Password
    - Activar **Firestore Database** (modo producción, cualquier región)
    - Generar una clave de cuenta de servicio: Configuración del proyecto → Cuentas de servicio → Generar nueva clave privada
-3. Copiar `.env.example` a `.env.local` y completar con los datos de Firebase (ver comentarios en el archivo)
-4. `npm run dev` y entrar a `http://localhost:3000/login` para crear la primera cuenta (queda admin automático)
+3. Crear una cuenta en [ImgBB](https://api.imgbb.com/) y sacar una API key gratis, para las fotos.
+4. Crear un proyecto en [Supabase](https://supabase.com) (gratis), y adentro: Storage → New bucket → nombre `contratos`, marcado como público. Sacar la `service_role key` de Configuración → API.
+5. Copiar `.env.example` a `.env.local` y completar con los datos de Firebase, ImgBB y Supabase (ver comentarios en el archivo)
+6. `npm run dev` y entrar a `http://localhost:3000/login` para crear la primera cuenta
 
 ## Deploy
 

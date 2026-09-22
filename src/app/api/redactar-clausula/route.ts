@@ -17,10 +17,14 @@ export async function POST(req: NextRequest) {
   const chequeo = await requerirUsuarioAprobado(req)
   if ('error' in chequeo) return NextResponse.json({ error: chequeo.error }, { status: chequeo.status })
 
-  const apiKey = process.env.GROQ_API_KEY
+  const apiKey = process.env.GROQ_API_KEY?.trim()
   if (!apiKey) {
     return NextResponse.json({ error: 'Falta configurar GROQ_API_KEY en el servidor.' }, { status: 500 })
   }
+  // Log temporal de diagnóstico: confirma que la clave que llega al
+  // servidor no tiene espacios/saltos de línea invisibles ni está
+  // vacía, sin exponer el valor real. Sacar una vez resuelto el 404.
+  console.log('GROQ_API_KEY diagnóstico — longitud:', apiKey.length, 'prefijo:', apiKey.slice(0, 4), 'sufijo:', apiKey.slice(-4))
 
   try {
     const { descripcion } = (await req.json()) as { descripcion?: string }
@@ -49,9 +53,11 @@ Reglas:
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        // Modelo rápido y gratuito de Groq. Si en algún momento deja de
-        // estar disponible, la lista vigente está en
-        // https://console.groq.com/docs/models
+        // Modelo rápido y gratuito de Groq, disponible en el free tier
+        // sin restricciones. Si preferís más calidad de redacción y tu
+        // cuenta tiene acceso, podés probar 'llama-3.3-70b-versatile'
+        // (algunas cuentas nuevas de Groq no lo tienen habilitado).
+        // Lista vigente: https://console.groq.com/docs/models
         model: 'llama-3.1-8b-instant',
         temperature: 0.4,
         max_tokens: 500,

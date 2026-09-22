@@ -37,6 +37,9 @@ export async function POST(req: NextRequest) {
 
   try {
     const datos = (await req.json()) as DatosContrato
+    // clausulasSeleccionadas y clausulasExtra vienen del checklist en
+    // el formulario; generarClausulasContrato ya sabe usar los valores
+    // por defecto si no llegan (ver src/lib/plantillaContrato.ts).
 
     if (!datos.inquilinoNombre || !datos.inquilinoCI || !datos.montoMensual || !datos.fechaInicio) {
       return NextResponse.json({ error: 'Faltan datos del inquilino o de las condiciones del alquiler.' }, { status: 400 })

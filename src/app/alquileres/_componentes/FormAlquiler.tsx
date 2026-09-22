@@ -4,6 +4,9 @@ import { useState } from 'react'
 import { useAuth } from '@/lib/auth'
 import { subirArchivo } from '@/lib/subirArchivo'
 import { detectarVariacion } from '@/data/inmuebles'
+import { CLAUSULAS_DISPONIBLES, CLAUSULAS_POR_DEFECTO, ClausulaId } from '@/lib/plantillaContrato'
+
+type ClausulaExtra = { titulo: string; texto: string }
 
 function bs(n: number) {
   return 'Bs ' + n.toLocaleString('es-BO', { minimumFractionDigits: 0 })
@@ -42,6 +45,53 @@ export function FormAlquiler({
   const [subiendoContrato, setSubiendoContrato] = useState(false)
   const [generandoContrato, setGenerandoContrato] = useState(false)
 
+  // Checklist de cláusulas del contrato, en base a la plantilla de
+  // ejemplo. Por defecto van todas tildadas.
+  const [clausulasElegidas, setClausulasElegidas] = useState<Set<ClausulaId>>(new Set(CLAUSULAS_POR_DEFECTO))
+  const [clausulasExtra, setClausulasExtra] = useState<ClausulaExtra[]>([])
+  const [pedidoIA, setPedidoIA] = useState('')
+  const [redactandoIA, setRedactandoIA] = useState(false)
+  const [mostrarClausulas, setMostrarClausulas] = useState(false)
+
+  function toggleClausula(id: ClausulaId) {
+    setClausulasElegidas((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  async function pedirClausulaIA() {
+    if (!pedidoIA.trim()) return
+    setRedactandoIA(true)
+    setError('')
+    try {
+      const token = await obtenerToken()
+      const res = await fetch('/api/redactar-clausula', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ descripcion: pedidoIA }),
+      })
+      const data = await res.json()
+      if (data.error) return setError(data.error)
+      setClausulasExtra((prev) => [...prev, { titulo: data.titulo, texto: data.texto }])
+      setPedidoIA('')
+    } catch (err: any) {
+      setError(err.message || 'No se pudo redactar la cláusula.')
+    } finally {
+      setRedactandoIA(false)
+    }
+  }
+
+  function quitarClausulaExtra(i: number) {
+    setClausulasExtra((prev) => prev.filter((_, idx) => idx !== i))
+  }
+
+  function actualizarClausulaExtra(i: number, campo: 'titulo' | 'texto', valor: string) {
+    setClausulasExtra((prev) => prev.map((c, idx) => (idx === i ? { ...c, [campo]: valor } : c)))
+  }
+
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
 
@@ -75,6 +125,8 @@ export function FormAlquiler({
           fechaInicio,
           fechaFin: fechaFin || null,
           administradorNombre,
+          clausulasSeleccionadas: Array.from(clausulasElegidas),
+          clausulasExtra,
         }),
       })
       const data = await res.json()
@@ -116,7 +168,8 @@ export function FormAlquiler({
     if (!inquilinoNombre.trim() || !inquilinoCI.trim()) return setError('Faltan datos del inquilino (nombre y C.I.).')
     if (!montoMensual || Number(montoMensual) <= 0) return setError('Cargá el monto mensual acordado.')
     if (!administradorUid) return setError('Indicá quién de la familia administra este espacio.')
-    if (!contratoUrl) return setError('Subí el contrato firmado antes de registrar el alquiler.')
+    // Subir el contrato firmado ya no es obligatorio: se puede
+    // registrar el alquiler y subirlo (o modificarlo) más adelante.
 
     setGuardando(true)
     try {
@@ -194,11 +247,85 @@ export function FormAlquiler({
       </select>
 
       <div className="font-body text-sm font-semibold text-ink mb-1">Contrato</div>
+
+      <button
+        type="button"
+        onClick={() => setMostrarClausulas((v) => !v)}
+        className="w-full flex items-center justify-between py-2 px-1 font-body text-xs text-inksoft mb-2"
+      >
+        <span>Cláusulas a incluir en el contrato</span>
+        <span>{mostrarClausulas ? '▲ ocultar' : '▼ elegir'}</span>
+      </button>
+
+      {mostrarClausulas && (
+        <div className="border border-line rounded-lg p-3 mb-3 bg-white/50">
+          <div className="font-body text-[11px] text-inksoft mb-2">
+            Basado en el modelo de contrato de alquiler de vivienda familiar. Destildá lo que no aplique.
+          </div>
+          {CLAUSULAS_DISPONIBLES.map((c) => (
+            <label key={c.id} className="flex items-start gap-2 py-1 font-body text-xs text-ink">
+              <input
+                type="checkbox"
+                checked={clausulasElegidas.has(c.id)}
+                disabled={c.obligatoria}
+                onChange={() => toggleClausula(c.id)}
+                className="mt-0.5"
+              />
+              <span className={c.obligatoria ? 'text-inksoft' : ''}>
+                {c.numero ? `${c.numero}. ` : ''}{c.titulo}{c.obligatoria ? ' (siempre incluida)' : ''}
+              </span>
+            </label>
+          ))}
+
+          <div className="border-t border-line mt-3 pt-3">
+            <div className="font-body text-[11px] font-semibold text-ink mb-1.5">Cláusulas adicionales</div>
+
+            {clausulasExtra.map((c, i) => (
+              <div key={i} className="border border-line rounded-lg p-2.5 mb-2 bg-white">
+                <div className="flex items-center justify-between mb-1.5">
+                  <input
+                    value={c.titulo}
+                    onChange={(e) => actualizarClausulaExtra(i, 'titulo', e.target.value)}
+                    className="font-body text-[11px] font-semibold text-ink bg-transparent border-none flex-1 outline-none"
+                  />
+                  <button type="button" onClick={() => quitarClausulaExtra(i)} className="font-body text-[11px] text-rojo shrink-0">
+                    Quitar
+                  </button>
+                </div>
+                <textarea
+                  value={c.texto}
+                  onChange={(e) => actualizarClausulaExtra(i, 'texto', e.target.value)}
+                  rows={3}
+                  className="w-full px-2 py-1.5 rounded border border-line font-body text-xs"
+                />
+              </div>
+            ))}
+
+            <div className="flex gap-2">
+              <input
+                value={pedidoIA}
+                onChange={(e) => setPedidoIA(e.target.value)}
+                placeholder="Describí lo que querés pactar y la IA redacta la cláusula (ej: se permiten mascotas)"
+                className="flex-1 px-2.5 py-2 rounded-lg border border-line font-body text-xs"
+              />
+              <button
+                type="button"
+                onClick={pedirClausulaIA}
+                disabled={!pedidoIA.trim() || redactandoIA}
+                className="px-3 py-1.5 rounded-lg border border-line font-body text-xs text-ink disabled:opacity-50 shrink-0"
+              >
+                {redactandoIA ? 'Redactando...' : '✨ Redactar con IA'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <button type="button" onClick={generarContratoPDF} disabled={generandoContrato} className="w-full py-2.5 rounded-lg border border-line font-body text-sm text-ink mb-3 disabled:opacity-60">
         {generandoContrato ? 'Generando...' : '📄 Generar contrato automáticamente (PDF para imprimir y firmar)'}
       </button>
 
-      <label className="font-body text-[11px] text-inksoft block mb-1">Subir el contrato ya firmado (imagen o PDF) — obligatorio</label>
+      <label className="font-body text-[11px] text-inksoft block mb-1">Subir el contrato ya firmado (imagen o PDF) — opcional</label>
       <div className="flex gap-2 mb-4">
         <input type="file" accept="image/*,application/pdf" onChange={(e) => setContratoFile(e.target.files?.[0] || null)} className="flex-1 font-body text-xs" />
         <button type="button" onClick={subirContratoFirmado} disabled={!contratoFile || subiendoContrato} className="px-3 py-1.5 rounded-lg border border-line font-body text-xs text-ink disabled:opacity-50">
@@ -206,6 +333,11 @@ export function FormAlquiler({
         </button>
       </div>
       {contratoUrl && <div className="font-body text-[11px] text-verde mb-3">✓ Contrato subido correctamente.</div>}
+      {!contratoUrl && (
+        <div className="font-body text-[11px] text-inksoft mb-3">
+          Podés registrar el alquiler sin subir el contrato ahora y subirlo más adelante.
+        </div>
+      )}
 
       {error && <div className="font-body text-xs text-rojo mb-3">{error}</div>}
 

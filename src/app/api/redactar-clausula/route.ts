@@ -52,7 +52,7 @@ Reglas:
         // Modelo rápido y gratuito de Groq. Si en algún momento deja de
         // estar disponible, la lista vigente está en
         // https://console.groq.com/docs/models
-        model: 'llama-3.3-70b-versatile',
+        model: 'llama-3.1-8b-instant',
         temperature: 0.4,
         max_tokens: 500,
         response_format: { type: 'json_object' },

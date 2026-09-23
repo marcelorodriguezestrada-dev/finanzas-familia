@@ -8,6 +8,7 @@ import { CLAUSULAS_DISPONIBLES, CLAUSULAS_POR_DEFECTO, ClausulaId } from '@/lib/
 
 type ClausulaExtra = { titulo: string; texto: string }
 type Plantilla = { id: string; nombre: string; clausulas: ClausulaExtra[] }
+type PersonaForm = { nombre: string; ci: string }
 
 function bs(n: number) {
   return 'Bs ' + n.toLocaleString('es-BO', { minimumFractionDigits: 0 })
@@ -34,6 +35,16 @@ export function FormAlquiler({
   const [inquilinoCI, setInquilinoCI] = useState('')
   const [inquilinoTelefono, setInquilinoTelefono] = useState('')
   const [inquilinoDireccionAnterior, setInquilinoDireccionAnterior] = useState('')
+  // Inquilinos adicionales, solo para el contrato en PDF (el registro
+  // del alquiler en la base sigue guardando un único inquilino
+  // principal — inquilinoNombre/inquilinoCI arriba — para no romper
+  // el resto de la app, que asume un inquilino por alquiler).
+  const [inquilinosExtra, setInquilinosExtra] = useState<PersonaForm[]>([])
+  // Propietarios firmantes del contrato. Arranca con todos los
+  // miembros de la familia tildados (así el contrato sale con todos
+  // los dueños listos para firmar), pero se pueden destildar o
+  // completar su C.I.
+  const [propietariosSeleccion, setPropietariosSeleccion] = useState<Record<string, { incluido: boolean; ci: string }>>({})
   const [montoMensual, setMontoMensual] = useState(unidad.canonEstandar?.toString() || '')
   const [anticipo, setAnticipo] = useState('')
   const [diaCobro, setDiaCobro] = useState('1')
@@ -77,6 +88,18 @@ export function FormAlquiler({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Por defecto, todos los miembros de la familia aparecen tildados
+  // como propietarios firmantes del contrato.
+  useEffect(() => {
+    setPropietariosSeleccion((prev) => {
+      const next = { ...prev }
+      for (const m of miembros) {
+        if (!next[m.uid]) next[m.uid] = { incluido: true, ci: '' }
+      }
+      return next
+    })
+  }, [miembros])
+
   function toggleClausulaPlantilla(clave: string) {
     setClausulasPlantillaElegidas((prev) => {
       const next = new Set(prev)
@@ -93,6 +116,26 @@ export function FormAlquiler({
       else next.add(id)
       return next
     })
+  }
+
+  function togglePropietario(uid: string) {
+    setPropietariosSeleccion((prev) => ({ ...prev, [uid]: { ...prev[uid], incluido: !prev[uid]?.incluido } }))
+  }
+
+  function setCIPropietario(uid: string, ci: string) {
+    setPropietariosSeleccion((prev) => ({ ...prev, [uid]: { ...prev[uid], ci } }))
+  }
+
+  function agregarInquilinoExtra() {
+    setInquilinosExtra((prev) => [...prev, { nombre: '', ci: '' }])
+  }
+
+  function actualizarInquilinoExtra(i: number, campo: 'nombre' | 'ci', valor: string) {
+    setInquilinosExtra((prev) => prev.map((p, idx) => (idx === i ? { ...p, [campo]: valor } : p)))
+  }
+
+  function quitarInquilinoExtra(i: number) {
+    setInquilinosExtra((prev) => prev.filter((_, idx) => idx !== i))
   }
 
   async function pedirClausulaIA() {
@@ -145,6 +188,19 @@ export function FormAlquiler({
       const administradorNombre = miembros.find((m) => m.uid === administradorUid)?.nombre || perfil?.nombre || ''
       const token = await obtenerToken()
 
+      // Propietarios firmantes: los miembros tildados, con su C.I. si
+      // se completó (si no, van sin C.I. en el documento).
+      const propietarios: PersonaForm[] = miembros
+        .filter((m) => propietariosSeleccion[m.uid]?.incluido)
+        .map((m) => ({ nombre: m.nombre, ci: propietariosSeleccion[m.uid]?.ci || '' }))
+
+      // Inquilinos: el principal (nombre/CI de arriba) más los
+      // adicionales que se hayan cargado.
+      const inquilinos: PersonaForm[] = [
+        { nombre: inquilinoNombre, ci: inquilinoCI },
+        ...inquilinosExtra.filter((p) => p.nombre.trim() || p.ci.trim()),
+      ]
+
       // Cláusulas de plantillas propias que el usuario tildó, resueltas
       // a su título+texto real, en el mismo orden en que las tildó.
       const clausulasDePlantillas: ClausulaExtra[] = Array.from(clausulasPlantillaElegidas)
@@ -163,8 +219,8 @@ export function FormAlquiler({
           propiedadDireccion: propiedad.direccion || '',
           unidadNombre: unidad.nombre,
           unidadTipo: unidad.tipo,
-          inquilinoNombre,
-          inquilinoCI,
+          propietarios,
+          inquilinos,
           inquilinoTelefono,
           inquilinoDireccionAnterior,
           montoMensual: Number(montoMensual),
@@ -248,10 +304,33 @@ export function FormAlquiler({
         <input value={inquilinoNombre} onChange={(e) => setInquilinoNombre(e.target.value)} placeholder="Nombre completo" className="px-3.5 py-2.5 rounded-lg border border-line font-body text-sm" />
         <input value={inquilinoCI} onChange={(e) => setInquilinoCI(e.target.value)} placeholder="C.I." className="px-3.5 py-2.5 rounded-lg border border-line font-body text-sm" />
       </div>
-      <div className="grid sm:grid-cols-2 gap-3 mb-4">
+      <div className="grid sm:grid-cols-2 gap-3 mb-3">
         <input value={inquilinoTelefono} onChange={(e) => setInquilinoTelefono(e.target.value)} placeholder="Teléfono (opcional)" className="px-3.5 py-2.5 rounded-lg border border-line font-body text-sm" />
         <input value={inquilinoDireccionAnterior} onChange={(e) => setInquilinoDireccionAnterior(e.target.value)} placeholder="Dirección anterior (opcional)" className="px-3.5 py-2.5 rounded-lg border border-line font-body text-sm" />
       </div>
+
+      {inquilinosExtra.map((p, i) => (
+        <div key={i} className="grid sm:grid-cols-[1fr_1fr_auto] gap-2 mb-2">
+          <input
+            value={p.nombre}
+            onChange={(e) => actualizarInquilinoExtra(i, 'nombre', e.target.value)}
+            placeholder="Nombre completo (co-inquilino)"
+            className="px-3.5 py-2.5 rounded-lg border border-line font-body text-sm"
+          />
+          <input
+            value={p.ci}
+            onChange={(e) => actualizarInquilinoExtra(i, 'ci', e.target.value)}
+            placeholder="C.I."
+            className="px-3.5 py-2.5 rounded-lg border border-line font-body text-sm"
+          />
+          <button type="button" onClick={() => quitarInquilinoExtra(i)} className="font-body text-xs text-rojo px-2">
+            Quitar
+          </button>
+        </div>
+      ))}
+      <button type="button" onClick={agregarInquilinoExtra} className="font-body text-[11px] text-ink underline mb-4">
+        + Agregar otro inquilino (para el contrato, ej. pareja o familiar que también firma)
+      </button>
 
       <div className="font-body text-sm font-semibold text-ink mb-1">Condiciones de pago</div>
       <div className="grid sm:grid-cols-3 gap-3 mb-1">
@@ -294,6 +373,33 @@ export function FormAlquiler({
         ))}
       </select>
 
+      <div className="font-body text-sm font-semibold text-ink mb-1">Propietarios firmantes del contrato</div>
+      <div className="font-body text-[11px] text-inksoft mb-2">
+        Tildá quiénes de la familia figuran como propietarios en el contrato (podés completar su C.I. para que salga en la firma).
+      </div>
+      <div className="mb-4">
+        {miembros.map((m) => (
+          <div key={m.uid} className="flex items-center gap-2 py-1">
+            <label className="flex items-center gap-2 font-body text-xs text-ink flex-1">
+              <input
+                type="checkbox"
+                checked={propietariosSeleccion[m.uid]?.incluido ?? true}
+                onChange={() => togglePropietario(m.uid)}
+              />
+              {m.nombre}
+            </label>
+            {propietariosSeleccion[m.uid]?.incluido && (
+              <input
+                value={propietariosSeleccion[m.uid]?.ci || ''}
+                onChange={(e) => setCIPropietario(m.uid, e.target.value)}
+                placeholder="C.I. (opcional)"
+                className="w-32 px-2.5 py-1.5 rounded-lg border border-line font-body text-xs"
+              />
+            )}
+          </div>
+        ))}
+      </div>
+
       <div className="font-body text-sm font-semibold text-ink mb-1">Contrato</div>
 
       <button
@@ -308,7 +414,7 @@ export function FormAlquiler({
       {mostrarClausulas && (
         <div className="border border-line rounded-lg p-3 mb-3 bg-white/50">
           <div className="font-body text-[11px] text-inksoft mb-2">
-            Basado en el modelo de contrato de alquiler de vivienda familiar. Destildá lo que no aplique.
+            Basado en el formato de contrato privado de alquiler de la familia (con cita al Art. 519 del Código Civil). Destildá lo que no aplique.
           </div>
           {CLAUSULAS_DISPONIBLES.map((c) => (
             <label key={c.id} className="flex items-start gap-2 py-1 font-body text-xs text-ink">

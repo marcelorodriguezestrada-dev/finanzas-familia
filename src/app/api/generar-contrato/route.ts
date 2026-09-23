@@ -52,11 +52,11 @@ export async function POST(req: NextRequest) {
     // el formulario; generarClausulasContrato ya sabe usar los valores
     // por defecto si no llegan (ver src/lib/plantillaContrato.ts).
 
-    if (!datos.inquilinoNombre || !datos.inquilinoCI || !datos.montoMensual || !datos.fechaInicio) {
+    if (!datos.inquilinos?.length || !datos.inquilinos[0]?.nombre || !datos.inquilinos[0]?.ci || !datos.montoMensual || !datos.fechaInicio) {
       return NextResponse.json({ error: 'Faltan datos del inquilino o de las condiciones del alquiler.' }, { status: 400 })
     }
 
-    const { titulo, parrafos } = generarClausulasContrato(datos)
+    const { titulo, parrafos, propietarios, inquilinos } = generarClausulasContrato(datos)
 
     const pdf = await PDFDocument.create()
     const fuente = await pdf.embedFont(StandardFonts.TimesRoman)
@@ -102,28 +102,36 @@ export async function POST(req: NextRequest) {
       y -= 8 // espacio entre cláusulas
     }
 
-    // Bloque de firmas al final.
-    nuevaPaginaSiHaceFalta(120)
-    y -= 40
-    const anchoFirma = 200
-    pagina.drawLine({ start: { x: margen, y }, end: { x: margen + anchoFirma, y }, thickness: 1, color: rgb(0.3, 0.3, 0.3) })
-    pagina.drawLine({
-      start: { x: anchoPagina - margen - anchoFirma, y },
-      end: { x: anchoPagina - margen, y },
-      thickness: 1,
-      color: rgb(0.3, 0.3, 0.3),
-    })
-    y -= 14
-    pagina.drawText('EL ARRENDADOR', { x: margen, y, size: 10, font: fuenteNegrita })
-    pagina.drawText('EL INQUILINO', { x: anchoPagina - margen - anchoFirma, y, size: 10, font: fuenteNegrita })
-    y -= 14
-    pagina.drawText(limpiarTexto(datos.administradorNombre || ''), { x: margen, y, size: 9, font: fuente })
-    pagina.drawText(limpiarTexto(`${datos.inquilinoNombre} — C.I. ${datos.inquilinoCI}`), {
-      x: anchoPagina - margen - anchoFirma,
-      y,
-      size: 9,
-      font: fuente,
-    })
+    // Bloque de firmas: una firma individual por cada propietario e
+    // inquilino, apiladas verticalmente (línea + nombre + C.I. +
+    // rol), igual que en el contrato de referencia — no una sola
+    // firma por parte, porque puede haber varios firmantes de cada
+    // lado.
+    const altoFirma = 55
+    const anchoLineaFirma = 260
+
+    function dibujarFirma(persona: { nombre: string; ci: string }, rol: string) {
+      nuevaPaginaSiHaceFalta(altoFirma)
+      y -= 30
+      pagina.drawLine({ start: { x: margen, y }, end: { x: margen + anchoLineaFirma, y }, thickness: 1, color: rgb(0.3, 0.3, 0.3) })
+      y -= 14
+      pagina.drawText(limpiarTexto(persona.nombre || ''), { x: margen, y, size: 10, font: fuenteNegrita })
+      y -= 13
+      if (persona.ci) {
+        pagina.drawText(limpiarTexto(`C.I. N.° ${persona.ci}`), { x: margen, y, size: 9, font: fuente, color: rgb(0.3, 0.3, 0.3) })
+        y -= 12
+      }
+      pagina.drawText(rol, { x: margen, y, size: 9, font: fuente, color: rgb(0.3, 0.3, 0.3) })
+    }
+
+    nuevaPaginaSiHaceFalta(20)
+    y -= 10
+    for (const propietario of propietarios) {
+      dibujarFirma(propietario, propietarios.length > 1 ? 'PROPIETARIO/A' : 'PROPIETARIO/A (o su representante)')
+    }
+    for (const inquilino of inquilinos) {
+      dibujarFirma(inquilino, inquilinos.length > 1 ? 'INQUILINO/A' : 'INQUILINO/A')
+    }
 
     const bytes = await pdf.save()
     const base64 = Buffer.from(bytes).toString('base64')

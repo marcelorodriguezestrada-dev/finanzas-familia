@@ -1,12 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAuth } from '@/lib/auth'
 import { subirArchivo } from '@/lib/subirArchivo'
 import { detectarVariacion } from '@/data/inmuebles'
 import { CLAUSULAS_DISPONIBLES, CLAUSULAS_POR_DEFECTO, ClausulaId } from '@/lib/plantillaContrato'
 
 type ClausulaExtra = { titulo: string; texto: string }
+type Plantilla = { id: string; nombre: string; clausulas: ClausulaExtra[] }
 
 function bs(n: number) {
   return 'Bs ' + n.toLocaleString('es-BO', { minimumFractionDigits: 0 })
@@ -45,13 +46,45 @@ export function FormAlquiler({
   const [subiendoContrato, setSubiendoContrato] = useState(false)
   const [generandoContrato, setGenerandoContrato] = useState(false)
 
-  // Checklist de cláusulas del contrato, en base a la plantilla de
-  // ejemplo. Por defecto van todas tildadas.
+  // Checklist de cláusulas del contrato, en base a la plantilla
+  // estándar interna. Por defecto van todas tildadas.
   const [clausulasElegidas, setClausulasElegidas] = useState<Set<ClausulaId>>(new Set(CLAUSULAS_POR_DEFECTO))
   const [clausulasExtra, setClausulasExtra] = useState<ClausulaExtra[]>([])
   const [pedidoIA, setPedidoIA] = useState('')
   const [redactandoIA, setRedactandoIA] = useState(false)
   const [mostrarClausulas, setMostrarClausulas] = useState(false)
+
+  // Plantillas de contrato subidas por la familia (ver
+  // /plantillas-contrato): cada una trae sus propias cláusulas ya
+  // extraídas por IA, que se pueden elegir igual que las estándar.
+  const [plantillas, setPlantillas] = useState<Plantilla[]>([])
+  const [cargandoPlantillas, setCargandoPlantillas] = useState(true)
+  // ids con formato "plantillaId::índice" de las cláusulas de
+  // plantilla que el usuario tildó.
+  const [clausulasPlantillaElegidas, setClausulasPlantillaElegidas] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    ;(async () => {
+      try {
+        const token = await obtenerToken()
+        const res = await fetch('/api/plantillas-contrato', { headers: { Authorization: `Bearer ${token}` } })
+        const data = await res.json()
+        setPlantillas(data.plantillas || [])
+      } finally {
+        setCargandoPlantillas(false)
+      }
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  function toggleClausulaPlantilla(clave: string) {
+    setClausulasPlantillaElegidas((prev) => {
+      const next = new Set(prev)
+      if (next.has(clave)) next.delete(clave)
+      else next.add(clave)
+      return next
+    })
+  }
 
   function toggleClausula(id: ClausulaId) {
     setClausulasElegidas((prev) => {
@@ -68,10 +101,14 @@ export function FormAlquiler({
     setError('')
     try {
       const token = await obtenerToken()
+      // Si el usuario ya tildó cláusulas de alguna plantilla propia,
+      // se usan esas como referencia de estilo para que la redacción
+      // suene parecida a los contratos reales de la familia.
+      const plantillaIds = Array.from(new Set(Array.from(clausulasPlantillaElegidas).map((c) => c.split('::')[0])))
       const res = await fetch('/api/redactar-clausula', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ descripcion: pedidoIA }),
+        body: JSON.stringify({ descripcion: pedidoIA, plantillaIds }),
       })
       const data = await res.json()
       if (data.error) return setError(data.error)
@@ -107,6 +144,17 @@ export function FormAlquiler({
     try {
       const administradorNombre = miembros.find((m) => m.uid === administradorUid)?.nombre || perfil?.nombre || ''
       const token = await obtenerToken()
+
+      // Cláusulas de plantillas propias que el usuario tildó, resueltas
+      // a su título+texto real, en el mismo orden en que las tildó.
+      const clausulasDePlantillas: ClausulaExtra[] = Array.from(clausulasPlantillaElegidas)
+        .map((clave) => {
+          const [plantillaId, indiceStr] = clave.split('::')
+          const plantilla = plantillas.find((p) => p.id === plantillaId)
+          return plantilla?.clausulas?.[Number(indiceStr)]
+        })
+        .filter((c): c is ClausulaExtra => !!c)
+
       const res = await fetch('/api/generar-contrato', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -126,7 +174,7 @@ export function FormAlquiler({
           fechaFin: fechaFin || null,
           administradorNombre,
           clausulasSeleccionadas: Array.from(clausulasElegidas),
-          clausulasExtra,
+          clausulasExtra: [...clausulasDePlantillas, ...clausulasExtra],
         }),
       })
       const data = await res.json()
@@ -276,6 +324,42 @@ export function FormAlquiler({
               </span>
             </label>
           ))}
+
+          <div className="border-t border-line mt-3 pt-3">
+            <div className="font-body text-[11px] font-semibold text-ink mb-1.5">
+              Cláusulas de plantillas propias{' '}
+              <a href="/plantillas-contrato" target="_blank" className="font-normal text-inksoft underline">
+                (gestionar plantillas)
+              </a>
+            </div>
+
+            {cargandoPlantillas && <div className="font-body text-[11px] text-inksoft mb-2">Cargando plantillas...</div>}
+            {!cargandoPlantillas && plantillas.length === 0 && (
+              <div className="font-body text-[11px] text-inksoft mb-2">
+                Todavía no subiste contratos de ejemplo. Subí uno en "Plantillas de contrato" y sus cláusulas van a aparecer acá.
+              </div>
+            )}
+
+            {plantillas.map((p) => (
+              <div key={p.id} className="mb-2.5">
+                <div className="font-body text-[11px] font-semibold text-inksoft mb-1">{p.nombre}</div>
+                {p.clausulas.map((c, i) => {
+                  const clave = `${p.id}::${i}`
+                  return (
+                    <label key={clave} className="flex items-start gap-2 py-0.5 font-body text-xs text-ink">
+                      <input
+                        type="checkbox"
+                        checked={clausulasPlantillaElegidas.has(clave)}
+                        onChange={() => toggleClausulaPlantilla(clave)}
+                        className="mt-0.5"
+                      />
+                      <span>{c.titulo}</span>
+                    </label>
+                  )
+                })}
+              </div>
+            ))}
+          </div>
 
           <div className="border-t border-line mt-3 pt-3">
             <div className="font-body text-[11px] font-semibold text-ink mb-1.5">Cláusulas adicionales</div>

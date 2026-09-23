@@ -9,6 +9,7 @@ const LINKS = [
   { href: '/movimientos', label: 'Ingresos y gastos' },
   { href: '/propiedades', label: 'Propiedades' },
   { href: '/alquileres', label: 'Alquileres' },
+  { href: '/plantillas-contrato', label: 'Plantillas de contrato' },
   { href: '/dashboard', label: 'Dashboard' },
   { href: '/calendario', label: 'Calendario' },
   { href: '/administracion', label: 'Fee admin.' },

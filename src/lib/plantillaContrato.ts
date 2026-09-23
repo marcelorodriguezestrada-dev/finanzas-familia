@@ -80,9 +80,19 @@ function bs(n: number) {
   return `Bs ${n.toLocaleString('es-BO', { minimumFractionDigits: 0 })}`
 }
 
+export type ParrafoContrato = {
+  // Encabezado de la cláusula, ej: "SEGUNDA. (CANON DE ALQUILER)." —
+  // se dibuja en negrita y en color. Vacío para párrafos sin
+  // encabezado (como el texto introductorio del contrato).
+  encabezado: string
+  // Cuerpo del párrafo, en texto normal.
+  cuerpo: string
+}
+
 // Devuelve el contrato como una lista de párrafos/cláusulas ya
-// armados en texto plano, más las listas de firmantes para el bloque
-// de firmas. El endpoint que genera el PDF se encarga solo de
+// armados, cada uno separado en encabezado (para poder pintarlo de
+// otro color/negrita) y cuerpo, más las listas de firmantes para el
+// bloque de firmas. El endpoint que genera el PDF se encarga solo de
 // maquetarlos (tamaños, saltos de página, líneas de firma, etc.).
 //
 // Las cláusulas estándar se arman solo si están en
@@ -94,7 +104,8 @@ function bs(n: number) {
 // de conformidad.
 export function generarClausulasContrato(d: DatosContrato): {
   titulo: string
-  parrafos: string[]
+  subtitulo: string
+  parrafos: ParrafoContrato[]
   propietarios: Persona[]
   inquilinos: Persona[]
 } {
@@ -116,113 +127,132 @@ export function generarClausulasContrato(d: DatosContrato): {
   let i = 0
   const siguienteOrdinal = () => ordinales[i++] || `CLÁUSULA ${i}`
 
-  const parrafos: string[] = []
+  const parrafos: ParrafoContrato[] = []
 
-  // Encabezado con referencia legal — estructural, siempre va.
-  parrafos.push(
-    `Conste por el presente CONTRATO PRIVADO DE ALQUILER, el mismo que se celebra al tenor de las siguientes cláusulas y condiciones de obligatorio cumplimiento al amparo del Art. 519 y concordantes del Código Civil de la República de Bolivia.`
-  )
+  // Encabezado con referencia legal — estructural, siempre va, sin
+  // título de cláusula propio.
+  parrafos.push({
+    encabezado: '',
+    cuerpo: `Conste por el presente CONTRATO PRIVADO DE ALQUILER, el mismo que se celebra al tenor de las siguientes cláusulas y condiciones de obligatorio cumplimiento al amparo del Art. 519 y concordantes del Código Civil de la República de Bolivia.`,
+  })
 
   // Cláusula de partes: siempre estructural, con sub-incisos por
   // cada propietario e inquilino (1.1, 1.2, ...).
-  const ordinalPartes = siguienteOrdinal()
   const propietariosTexto = propietarios
     .map((p) => (p.ci ? `${p.nombre} (con C.I. N.° ${p.ci})` : p.nombre))
     .join(', ')
   const inquilinosTexto = inquilinos
     .map((p) => (p.ci ? `${p.nombre} (titular de la Cédula de Identidad N.° ${p.ci})` : p.nombre))
     .join(', ')
-  parrafos.push(
-    `${ordinalPartes} (PARTES CONTRATANTES). 1.1. LOS PROPIETARIOS: ${propietariosTexto}, mayores de edad, hábiles por derecho, quienes a los efectos del presente contrato se denominarán conjuntamente como LOS PROPIETARIOS. 1.2. LOS INQUILINOS: ${inquilinosTexto}, mayores de edad, hábiles por derecho${d.inquilinoTelefono ? `, con teléfono de contacto ${d.inquilinoTelefono}` : ''}, quien(es) en lo sucesivo se denominará(n) simplemente como LOS INQUILINOS. Se suscribe el presente contrato en la ciudad de _______________, a los ${formatearFecha(d.fechaInicio)}.`
-  )
+  parrafos.push({
+    encabezado: `${siguienteOrdinal()}. (PARTES CONTRATANTES)`,
+    cuerpo: `1.1. LOS PROPIETARIOS: ${propietariosTexto}, mayores de edad, hábiles por derecho, quienes a los efectos del presente contrato se denominarán conjuntamente como LOS PROPIETARIOS. 1.2. LOS INQUILINOS: ${inquilinosTexto}, mayores de edad, hábiles por derecho${d.inquilinoTelefono ? `, con teléfono de contacto ${d.inquilinoTelefono}` : ''}, quien(es) en lo sucesivo se denominará(n) simplemente como LOS INQUILINOS. Se suscribe el presente contrato en la ciudad de _______________, a los ${formatearFecha(d.fechaInicio)}.`,
+  })
 
   if (incluye('objeto')) {
-    parrafos.push(
-      `${siguienteOrdinal()}. (DESCRIPCIÓN DEL INMUEBLE). LOS PROPIETARIOS ceden en calidad de alquiler el inmueble ubicado en ${direccionCompleta}, correspondiente a ${d.unidadTipo}, el cual se entrega única y exclusivamente para VIVIENDA FAMILIAR de LOS INQUILINOS, quedando totalmente prohibido darle uso comercial, subalquilar o ceder el espacio a terceros sin autorización escrita de LOS PROPIETARIOS.`
-    )
+    parrafos.push({
+      encabezado: `${siguienteOrdinal()}. (DESCRIPCIÓN DEL INMUEBLE)`,
+      cuerpo: `LOS PROPIETARIOS ceden en calidad de alquiler el inmueble ubicado en ${direccionCompleta}, correspondiente a ${d.unidadTipo}, el cual se entrega única y exclusivamente para VIVIENDA FAMILIAR de LOS INQUILINOS, quedando totalmente prohibido darle uso comercial, subalquilar o ceder el espacio a terceros sin autorización escrita de LOS PROPIETARIOS.`,
+    })
   }
 
   if (incluye('canon')) {
-    parrafos.push(
-      `${siguienteOrdinal()}. (CANON DE ALQUILER). Las partes convienen libre y voluntariamente el canon locativo mensual de ${bs(d.montoMensual)} (${d.montoMensual} bolivianos), que LOS INQUILINOS se comprometen a cancelar puntualmente dentro de los primeros ${d.diaCobro} días de cada mes, en efectivo o mediante transferencia bancaria / código QR. En caso de que la transacción digital genere algún costo de envío o comisión, dicho importe deberá ser asumido en su totalidad por LOS INQUILINOS.`
-    )
+    parrafos.push({
+      encabezado: `${siguienteOrdinal()}. (CANON DE ALQUILER)`,
+      cuerpo: `Las partes convienen libre y voluntariamente el canon locativo mensual de ${bs(d.montoMensual)} (${d.montoMensual} bolivianos), que LOS INQUILINOS se comprometen a cancelar puntualmente dentro de los primeros ${d.diaCobro} días de cada mes, en efectivo o mediante transferencia bancaria / código QR. En caso de que la transacción digital genere algún costo de envío o comisión, dicho importe deberá ser asumido en su totalidad por LOS INQUILINOS.`,
+    })
   }
 
   if (incluye('anticipo')) {
-    parrafos.push(
-      d.anticipo
-        ? `${siguienteOrdinal()}. (ANTICIPO / GARANTÍA). LOS INQUILINOS entregan en este acto la suma de ${bs(d.anticipo)} en calidad de anticipo/garantía, monto que será devuelto a la finalización del contrato, previa verificación del estado del inmueble y del cumplimiento de todas las obligaciones asumidas en este documento.`
-        : `${siguienteOrdinal()}. (ANTICIPO / GARANTÍA). Las partes dejan constancia de que no se pactó anticipo ni garantía adicional al canon de alquiler mensual establecido en este contrato.`
-    )
+    parrafos.push({
+      encabezado: `${siguienteOrdinal()}. (ANTICIPO / GARANTÍA)`,
+      cuerpo: d.anticipo
+        ? `LOS INQUILINOS entregan en este acto la suma de ${bs(d.anticipo)} en calidad de anticipo/garantía, monto que será devuelto a la finalización del contrato, previa verificación del estado del inmueble y del cumplimiento de todas las obligaciones asumidas en este documento.`
+        : `Las partes dejan constancia de que no se pactó anticipo ni garantía adicional al canon de alquiler mensual establecido en este contrato.`,
+    })
   }
 
   if (incluye('plazo')) {
-    parrafos.push(
-      `${siguienteOrdinal()}. (PLAZO Y DEVOLUCIÓN). El presente contrato tiene vigencia a partir del ${formatearFecha(d.fechaInicio)}${
+    parrafos.push({
+      encabezado: `${siguienteOrdinal()}. (PLAZO Y DEVOLUCIÓN)`,
+      cuerpo: `El presente contrato tiene vigencia a partir del ${formatearFecha(d.fechaInicio)}${
         d.fechaFin ? ` hasta el ${formatearFecha(d.fechaFin)}, de forma impostergable` : ', con carácter renovable mes a mes salvo aviso previo de cualquiera de las partes con al menos treinta (30) días de anticipación'
-      }. Al vencimiento del plazo o en caso de resolución, LOS INQUILINOS se obligan a restituir el inmueble totalmente desocupado, en las mismas condiciones óptimas de habitabilidad, limpieza y conservación en que lo reciben. Cualquier renovación requerirá la suscripción previa de un nuevo acuerdo escrito, negándose expresamente la tácita reconducción.`
-    )
+      }. Al vencimiento del plazo o en caso de resolución, LOS INQUILINOS se obligan a restituir el inmueble totalmente desocupado, en las mismas condiciones óptimas de habitabilidad, limpieza y conservación en que lo reciben. Cualquier renovación requerirá la suscripción previa de un nuevo acuerdo escrito, negándose expresamente la tácita reconducción.`,
+    })
   }
 
   if (incluye('obligacionesInquilino')) {
-    parrafos.push(
-      `${siguienteOrdinal()}. (OBLIGACIONES DE LOS INQUILINOS). LOS INQUILINOS se comprometen a: a) cancelar puntualmente el canon de alquiler en la fecha pactada; b) usar el inmueble con el cuidado debido, haciéndose responsables de los daños ocasionados por mal uso; c) no realizar modificaciones a la infraestructura sin autorización escrita; d) comunicar oportunamente a LOS PROPIETARIOS cualquier desperfecto o necesidad de reparación; e) no subarrendar total ni parcialmente el inmueble sin consentimiento expreso.`
-    )
+    parrafos.push({
+      encabezado: `${siguienteOrdinal()}. (OBLIGACIONES DE LOS INQUILINOS)`,
+      cuerpo: `LOS INQUILINOS se comprometen a: a) cancelar puntualmente el canon de alquiler en la fecha pactada; b) usar el inmueble con el cuidado debido, haciéndose responsables de los daños ocasionados por mal uso; c) no realizar modificaciones a la infraestructura sin autorización escrita; d) comunicar oportunamente a LOS PROPIETARIOS cualquier desperfecto o necesidad de reparación; e) no subarrendar total ni parcialmente el inmueble sin consentimiento expreso.`,
+    })
   }
 
   if (incluye('obligacionesArrendador')) {
-    parrafos.push(
-      `${siguienteOrdinal()}. (OBLIGACIONES DE LOS PROPIETARIOS). LOS PROPIETARIOS se comprometen a entregar el inmueble en condiciones habitables y a realizar, por su cuenta, las reparaciones estructurales que no sean atribuibles a mal uso de LOS INQUILINOS, dentro de un plazo razonable desde que sean notificados.`
-    )
+    parrafos.push({
+      encabezado: `${siguienteOrdinal()}. (OBLIGACIONES DE LOS PROPIETARIOS)`,
+      cuerpo: `LOS PROPIETARIOS se comprometen a entregar el inmueble en condiciones habitables y a realizar, por su cuenta, las reparaciones estructurales que no sean atribuibles a mal uso de LOS INQUILINOS, dentro de un plazo razonable desde que sean notificados.`,
+    })
   }
 
   if (incluye('serviciosBasicos')) {
-    parrafos.push(
-      `${siguienteOrdinal()}. (SERVICIOS BÁSICOS Y MANTENIMIENTO). El pago de los servicios básicos (energía eléctrica, gas natural, agua potable) corre por cuenta de LOS INQUILINOS según medidor propio o prorrateo equitativo entre los ocupantes del inmueble. LOS INQUILINOS se comprometen a realizar las reparaciones menores de uso diario y a mantener el inmueble en perfectas condiciones de higiene y conservación.`
-    )
+    parrafos.push({
+      encabezado: `${siguienteOrdinal()}. (SERVICIOS BÁSICOS Y MANTENIMIENTO)`,
+      cuerpo: `El pago de los servicios básicos (energía eléctrica, gas natural, agua potable) corre por cuenta de LOS INQUILINOS según medidor propio o prorrateo equitativo entre los ocupantes del inmueble. LOS INQUILINOS se comprometen a realizar las reparaciones menores de uso diario y a mantener el inmueble en perfectas condiciones de higiene y conservación.`,
+    })
   }
 
   if (incluye('mascotas')) {
-    parrafos.push(
-      `${siguienteOrdinal()}. (PROHIBICIÓN DE MASCOTAS). Se establece la prohibición absoluta de tenencia, permanencia o ingreso de mascotas o animales de cualquier especie dentro del inmueble, constituyendo su incumplimiento causal de resolución inmediata del presente contrato.`
-    )
+    parrafos.push({
+      encabezado: `${siguienteOrdinal()}. (PROHIBICIÓN DE MASCOTAS)`,
+      cuerpo: `Se establece la prohibición absoluta de tenencia, permanencia o ingreso de mascotas o animales de cualquier especie dentro del inmueble, constituyendo su incumplimiento causal de resolución inmediata del presente contrato.`,
+    })
   }
 
   if (incluye('mora')) {
-    parrafos.push(
-      `${siguienteOrdinal()}. (PENALIDAD POR MORA). El pago del canon de alquiler realizado después de la fecha pactada generará un recargo sancionatorio de Bs 30.- (treinta bolivianos) por cada día de retraso, hasta la cancelación efectiva de la mensualidad adeudada.`
-    )
+    parrafos.push({
+      encabezado: `${siguienteOrdinal()}. (PENALIDAD POR MORA)`,
+      cuerpo: `El pago del canon de alquiler realizado después de la fecha pactada generará un recargo sancionatorio de Bs 30.- (treinta bolivianos) por cada día de retraso, hasta la cancelación efectiva de la mensualidad adeudada.`,
+    })
   }
 
   if (incluye('resolucionAutomatica')) {
-    parrafos.push(
-      `${siguienteOrdinal()}. (RESOLUCIÓN AUTOMÁTICA). El presente contrato quedará resuelto de pleno derecho y en forma automática por cualquiera de las siguientes causales: a) mora en el pago de dos (2) mensualidades consecutivas de alquiler; b) incumplimiento de las prohibiciones establecidas en este contrato; c) provocar daños o deterioros graves al inmueble; d) subalquilar, ceder a terceros o dar un uso distinto al de vivienda familiar autorizado.`
-    )
+    parrafos.push({
+      encabezado: `${siguienteOrdinal()}. (RESOLUCIÓN AUTOMÁTICA)`,
+      cuerpo: `El presente contrato quedará resuelto de pleno derecho y en forma automática por cualquiera de las siguientes causales: a) mora en el pago de dos (2) mensualidades consecutivas de alquiler; b) incumplimiento de las prohibiciones establecidas en este contrato; c) provocar daños o deterioros graves al inmueble; d) subalquilar, ceder a terceros o dar un uso distinto al de vivienda familiar autorizado.`,
+    })
   }
 
   if (incluye('confidencialidad')) {
-    parrafos.push(
-      `${siguienteOrdinal()}. (CARÁCTER PRIVADO Y CONFIDENCIAL). El presente documento constituye un acuerdo estrictamente privado y confidencial celebrado de buena fe entre las partes, surtiendo plena fuerza obligatoria entre las mismas conforme al Art. 519 del Código Civil de la República de Bolivia.`
-    )
+    parrafos.push({
+      encabezado: `${siguienteOrdinal()}. (CARÁCTER PRIVADO Y CONFIDENCIAL)`,
+      cuerpo: `El presente documento constituye un acuerdo estrictamente privado y confidencial celebrado de buena fe entre las partes, surtiendo plena fuerza obligatoria entre las mismas conforme al Art. 519 del Código Civil de la República de Bolivia.`,
+    })
   }
 
   if (incluye('rescision')) {
-    parrafos.push(
-      `${siguienteOrdinal()}. (RESCISIÓN). Cualquiera de las partes podrá dar por concluido el presente contrato antes de su vencimiento, debiendo notificar a la otra parte con una anticipación mínima de treinta (30) días, sin perjuicio de las obligaciones pendientes al momento de la rescisión.`
-    )
+    parrafos.push({
+      encabezado: `${siguienteOrdinal()}. (RESCISIÓN)`,
+      cuerpo: `Cualquiera de las partes podrá dar por concluido el presente contrato antes de su vencimiento, debiendo notificar a la otra parte con una anticipación mínima de treinta (30) días, sin perjuicio de las obligaciones pendientes al momento de la rescisión.`,
+    })
   }
 
   // Cláusulas adicionales (manuales, IA, o tomadas de una plantilla
   // propia), cada una numerada correlativamente con las anteriores.
   for (const extra of d.clausulasExtra ?? []) {
     const titulo = extra.titulo?.trim().toUpperCase() || 'CLÁUSULA ADICIONAL'
-    parrafos.push(`${siguienteOrdinal()}. (${titulo}). ${extra.texto.trim()}`)
+    parrafos.push({ encabezado: `${siguienteOrdinal()}. (${titulo})`, cuerpo: extra.texto.trim() })
   }
 
   // La de conformidad/firmas es estructural: siempre va al final.
-  parrafos.push(
-    `${siguienteOrdinal()}. (CONFORMIDAD Y FIRMAS). En señal de absoluta conformidad con todas y cada una de las cláusulas estipuladas, las partes firman el presente contrato en la ciudad de _______________, a los ${formatearFecha(d.fechaInicio)}.`
-  )
+  parrafos.push({
+    encabezado: `${siguienteOrdinal()}. (CONFORMIDAD Y FIRMAS)`,
+    cuerpo: `En señal de absoluta conformidad con todas y cada una de las cláusulas estipuladas, las partes firman el presente contrato en la ciudad de _______________, a los ${formatearFecha(d.fechaInicio)}.`,
+  })
 
-  return { titulo: 'CONTRATO PRIVADO DE ALQUILER', parrafos, propietarios, inquilinos }
+  // Subtítulo bajo el título principal, con la referencia del
+  // inmueble (dirección + unidad), en itálica en el PDF.
+  const subtitulo = direccionCompleta ? `(Inmueble ${direccionCompleta})` : ''
+
+  return { titulo: 'CONTRATO PRIVADO DE ALQUILER', subtitulo, parrafos, propietarios, inquilinos }
 }

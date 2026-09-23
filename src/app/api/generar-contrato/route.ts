@@ -5,12 +5,23 @@ import { generarClausulasContrato, DatosContrato } from '@/lib/plantillaContrato
 
 export const dynamic = 'force-dynamic'
 
+// Limpia saltos de línea, tabs y espacios raros de un texto antes de
+// dibujarlo. Esto es necesario porque pdf-lib con las fuentes
+// estándar (WinAnsi) no puede codificar el carácter de salto de línea
+// (\n, 0x000a) si aparece dentro de una palabra al dibujar texto -
+// solo sirve como separador de nuestras propias líneas ya envueltas.
+// Los saltos de línea sueltos llegan sobre todo en cláusulas pegadas
+// a mano o extraídas de un PDF con pdf-parse.
+function limpiarTexto(texto: string): string {
+  return texto.replace(/\s+/g, ' ').trim()
+}
+
 // Corta un párrafo en líneas que entren en el ancho disponible,
 // midiendo con la fuente real (si se corta "a ojo" por cantidad de
 // caracteres, las negritas o números angostos generan renglones
 // desparejos).
 function envolverTexto(texto: string, font: any, tamano: number, anchoMax: number): string[] {
-  const palabras = texto.split(' ')
+  const palabras = limpiarTexto(texto).split(' ')
   const lineas: string[] = []
   let actual = ''
   for (const palabra of palabras) {
@@ -69,8 +80,9 @@ export async function POST(req: NextRequest) {
     }
 
     // Título centrado
-    const anchoTitulo = fuenteNegrita.widthOfTextAtSize(titulo, 16)
-    pagina.drawText(titulo, {
+    const tituloLimpio = limpiarTexto(titulo)
+    const anchoTitulo = fuenteNegrita.widthOfTextAtSize(tituloLimpio, 16)
+    pagina.drawText(tituloLimpio, {
       x: (anchoPagina - anchoTitulo) / 2,
       y,
       size: 16,
@@ -105,8 +117,8 @@ export async function POST(req: NextRequest) {
     pagina.drawText('EL ARRENDADOR', { x: margen, y, size: 10, font: fuenteNegrita })
     pagina.drawText('EL INQUILINO', { x: anchoPagina - margen - anchoFirma, y, size: 10, font: fuenteNegrita })
     y -= 14
-    pagina.drawText(datos.administradorNombre || '', { x: margen, y, size: 9, font: fuente })
-    pagina.drawText(`${datos.inquilinoNombre} — C.I. ${datos.inquilinoCI}`, {
+    pagina.drawText(limpiarTexto(datos.administradorNombre || ''), { x: margen, y, size: 9, font: fuente })
+    pagina.drawText(limpiarTexto(`${datos.inquilinoNombre} — C.I. ${datos.inquilinoCI}`), {
       x: anchoPagina - margen - anchoFirma,
       y,
       size: 9,

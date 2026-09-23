@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/auth'
 import { subirArchivo } from '@/lib/subirArchivo'
 import { detectarVariacion } from '@/data/inmuebles'
 import { CLAUSULAS_DISPONIBLES, CLAUSULAS_POR_DEFECTO, ClausulaId } from '@/lib/plantillaContrato'
+import { EscanerCedula } from '@/components/EscanerCedula'
 
 type ClausulaExtra = { titulo: string; texto: string }
 type Plantilla = { id: string; nombre: string; clausulas: ClausulaExtra[] }
@@ -308,29 +309,46 @@ export function FormAlquiler({
         <input value={inquilinoTelefono} onChange={(e) => setInquilinoTelefono(e.target.value)} placeholder="Teléfono (opcional)" className="px-3.5 py-2.5 rounded-lg border border-line font-body text-sm" />
         <input value={inquilinoDireccionAnterior} onChange={(e) => setInquilinoDireccionAnterior(e.target.value)} placeholder="Dirección anterior (opcional)" className="px-3.5 py-2.5 rounded-lg border border-line font-body text-sm" />
       </div>
+      <div className="mb-3">
+        <EscanerCedula
+          onDatosDetectados={(datos) => {
+            if (datos.nombre) setInquilinoNombre(datos.nombre)
+            if (datos.ci) setInquilinoCI(datos.ci)
+          }}
+        />
+      </div>
 
       {inquilinosExtra.map((p, i) => (
-        <div key={i} className="grid sm:grid-cols-[1fr_1fr_auto] gap-2 mb-2">
-          <input
-            value={p.nombre}
-            onChange={(e) => actualizarInquilinoExtra(i, 'nombre', e.target.value)}
-            placeholder="Nombre completo (co-inquilino)"
-            className="px-3.5 py-2.5 rounded-lg border border-line font-body text-sm"
+        <div key={i} className="mb-3 border-t border-line pt-3">
+          <div className="grid sm:grid-cols-[1fr_1fr_auto] gap-2 mb-2">
+            <input
+              value={p.nombre}
+              onChange={(e) => actualizarInquilinoExtra(i, 'nombre', e.target.value)}
+              placeholder="Nombre completo (co-inquilino)"
+              className="px-3.5 py-2.5 rounded-lg border border-line font-body text-sm"
+            />
+            <input
+              value={p.ci}
+              onChange={(e) => actualizarInquilinoExtra(i, 'ci', e.target.value)}
+              placeholder="C.I."
+              className="px-3.5 py-2.5 rounded-lg border border-line font-body text-sm"
+            />
+            <button type="button" onClick={() => quitarInquilinoExtra(i)} className="font-body text-xs text-rojo px-2">
+              Quitar
+            </button>
+          </div>
+          <EscanerCedula
+            onDatosDetectados={(datos) => {
+              if (datos.nombre) actualizarInquilinoExtra(i, 'nombre', datos.nombre)
+              if (datos.ci) actualizarInquilinoExtra(i, 'ci', datos.ci)
+            }}
           />
-          <input
-            value={p.ci}
-            onChange={(e) => actualizarInquilinoExtra(i, 'ci', e.target.value)}
-            placeholder="C.I."
-            className="px-3.5 py-2.5 rounded-lg border border-line font-body text-sm"
-          />
-          <button type="button" onClick={() => quitarInquilinoExtra(i)} className="font-body text-xs text-rojo px-2">
-            Quitar
-          </button>
         </div>
       ))}
       <button type="button" onClick={agregarInquilinoExtra} className="font-body text-[11px] text-ink underline mb-4">
         + Agregar otro inquilino (para el contrato, ej. pareja o familiar que también firma)
       </button>
+
 
       <div className="font-body text-sm font-semibold text-ink mb-1">Condiciones de pago</div>
       <div className="grid sm:grid-cols-3 gap-3 mb-1">

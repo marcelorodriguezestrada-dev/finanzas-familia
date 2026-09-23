@@ -75,6 +75,14 @@ export function FormAlquiler({
   // plantilla que el usuario tildó.
   const [clausulasPlantillaElegidas, setClausulasPlantillaElegidas] = useState<Set<string>>(new Set())
 
+  // Importar datos de un contrato viejo ya firmado (PDF), para
+  // precargar el formulario en vez de tipear todo de nuevo. La
+  // propiedad/unidad la sigue eligiendo el usuario a mano — este
+  // botón solo completa inquilinos, propietarios, montos, fechas y
+  // el checklist de cláusulas detectadas.
+  const [importandoContrato, setImportandoContrato] = useState(false)
+  const [avisoImportacion, setAvisoImportacion] = useState('')
+
   useEffect(() => {
     ;(async () => {
       try {
@@ -137,6 +145,71 @@ export function FormAlquiler({
 
   function quitarInquilinoExtra(i: number) {
     setInquilinosExtra((prev) => prev.filter((_, idx) => idx !== i))
+  }
+
+  async function importarContratoViejo(archivo: File) {
+    setImportandoContrato(true)
+    setAvisoImportacion('')
+    setError('')
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result as string)
+        reader.onerror = reject
+        reader.readAsDataURL(archivo)
+      })
+
+      const token = await obtenerToken()
+      const res = await fetch('/api/importar-contrato', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ pdfBase64: base64 }),
+      })
+      const data = await res.json()
+      if (data.error) return setError(data.error)
+
+      // Precarga todos los campos con lo que la IA pudo extraer. El
+      // usuario revisa y corrige antes de guardar — nada se guarda
+      // automáticamente acá.
+      if (data.inquilinos?.length > 0) {
+        setInquilinoNombre(data.inquilinos[0].nombre || '')
+        setInquilinoCI(data.inquilinos[0].ci || '')
+        setInquilinosExtra(data.inquilinos.slice(1).map((p: PersonaForm) => ({ nombre: p.nombre || '', ci: p.ci || '' })))
+      }
+      if (data.propietarios?.length > 0) {
+        // Solo marca/completa la C.I. de los propietarios que ya
+        // coinciden por nombre con un miembro de la familia; no
+        // agrega gente nueva a la lista de miembros.
+        setPropietariosSeleccion((prev) => {
+          const next = { ...prev }
+          for (const m of miembros) {
+            const match = data.propietarios.find(
+              (p: PersonaForm) => p.nombre?.trim().toLowerCase() === m.nombre?.trim().toLowerCase()
+            )
+            if (match?.ci) next[m.uid] = { incluido: true, ci: match.ci }
+          }
+          return next
+        })
+      }
+      if (data.inquilinoTelefono) setInquilinoTelefono(data.inquilinoTelefono)
+      if (data.montoMensual) setMontoMensual(String(data.montoMensual))
+      if (data.anticipo) setAnticipo(String(data.anticipo))
+      if (data.diaCobro) setDiaCobro(String(data.diaCobro))
+      if (data.fechaInicio) setFechaInicio(data.fechaInicio)
+      if (data.fechaFin) setFechaFin(data.fechaFin)
+      if (data.clausulasDetectadas?.length > 0) {
+        setClausulasElegidas((prev) => new Set([...Array.from(prev), ...data.clausulasDetectadas]))
+        setMostrarClausulas(true)
+      }
+
+      setAvisoImportacion(
+        `Se precargaron los datos del contrato${data.direccionMencionada ? ` (menciona: "${data.direccionMencionada}")` : ''}. Elegí la propiedad y unidad correspondiente abajo, y revisá todo antes de guardar.`
+      )
+    } catch (err: any) {
+      setError(err.message || 'No se pudo importar el contrato.')
+    } finally {
+      setImportandoContrato(false)
+    }
   }
 
   async function pedirClausulaIA() {
@@ -300,6 +373,25 @@ export function FormAlquiler({
 
   return (
     <form onSubmit={guardar} className="bg-panel border border-line rounded-xl p-5 mb-6">
+      <div className="border border-line rounded-lg p-3 mb-5 bg-white/50">
+        <div className="font-body text-sm font-semibold text-ink mb-1">¿Ya tenés un contrato viejo firmado para este alquiler?</div>
+        <div className="font-body text-[11px] text-inksoft mb-2">
+          Subí el PDF y la IA precarga inquilinos, propietarios, montos, fechas y cláusulas — vos elegís la propiedad/unidad y revisás todo antes de guardar.
+        </div>
+        <input
+          type="file"
+          accept="application/pdf"
+          disabled={importandoContrato}
+          onChange={(e) => {
+            const archivo = e.target.files?.[0]
+            if (archivo) importarContratoViejo(archivo)
+          }}
+          className="w-full font-body text-xs"
+        />
+        {importandoContrato && <div className="font-body text-[11px] text-inksoft mt-2">Leyendo el contrato con IA...</div>}
+        {avisoImportacion && <div className="font-body text-[11px] text-verde mt-2">{avisoImportacion}</div>}
+      </div>
+
       <div className="font-body text-sm font-semibold text-ink mb-1">Datos del inquilino</div>
       <div className="grid sm:grid-cols-2 gap-3 mb-3">
         <input value={inquilinoNombre} onChange={(e) => setInquilinoNombre(e.target.value)} placeholder="Nombre completo" className="px-3.5 py-2.5 rounded-lg border border-line font-body text-sm" />

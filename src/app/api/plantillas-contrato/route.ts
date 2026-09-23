@@ -1,13 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requerirUsuarioAprobado, getDb } from '@/lib/firebaseAdmin'
 import { pedirJsonAGroq, GroqError } from '@/lib/groq'
-// @ts-ignore — pdf-parse no trae tipos completos para su build interno,
-// pero el import por defecto funciona bien en Node.
-import pdfParse from 'pdf-parse'
+import { extraerTextoDePDFBase64, PdfTextoError } from '@/lib/pdfTexto'
 
 export const dynamic = 'force-dynamic'
-
-const MAX_CARACTERES_TEXTO = 12000 // recorte de seguridad para no pasarnos de tokens con contratos muy largos
 
 // GET — lista las plantillas de contrato subidas, más recientes primero.
 export async function GET(req: NextRequest) {
@@ -40,29 +36,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Falta el archivo PDF.' }, { status: 400 })
     }
 
-    const soloBase64 = pdfBase64.includes(',') ? pdfBase64.split(',')[1] : pdfBase64
-    const buffer = Buffer.from(soloBase64, 'base64')
-
-    let textoCompleto = ''
+    let textoRecortado: string
     try {
-      const resultado = await pdfParse(buffer)
-      textoCompleto = (resultado.text || '').trim()
+      textoRecortado = await extraerTextoDePDFBase64(pdfBase64)
     } catch (err) {
-      console.error('pdf-parse falló', err)
-      return NextResponse.json(
-        { error: 'No se pudo leer el texto del PDF. Puede estar escaneado como imagen — probá con un PDF que tenga texto seleccionable.' },
-        { status: 400 }
-      )
+      if (err instanceof PdfTextoError) return NextResponse.json({ error: err.message }, { status: 400 })
+      throw err
     }
-
-    if (!textoCompleto || textoCompleto.length < 50) {
-      return NextResponse.json(
-        { error: 'El PDF no tiene texto legible (¿es una foto escaneada?). Subí uno con texto seleccionable.' },
-        { status: 400 }
-      )
-    }
-
-    const textoRecortado = textoCompleto.slice(0, MAX_CARACTERES_TEXTO)
 
     const systemPrompt = `Analizás contratos de alquiler de vivienda en Bolivia. Se te da el texto completo (o parcial) de un contrato real. Tu trabajo es identificar sus cláusulas y devolverlas separadas, cada una con un título corto y su texto completo tal como aparece en el documento (podés limpiar saltos de línea raros de la extracción, pero no reescribas el contenido).
 

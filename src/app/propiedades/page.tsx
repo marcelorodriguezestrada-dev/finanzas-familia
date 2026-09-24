@@ -6,6 +6,7 @@ import { PaginaProtegida } from '@/components/PaginaProtegida'
 import { TarjetaUnidad } from './_componentes/TarjetaUnidad'
 import { FormUnidad } from './_componentes/FormUnidad'
 import { Reparaciones } from './_componentes/Reparaciones'
+import { IngresoInteligenteEspacios } from './_componentes/IngresoInteligenteEspacios'
 
 export default function PropiedadesPage() {
   const { obtenerToken } = useAuth()
@@ -22,6 +23,8 @@ export default function PropiedadesPage() {
 
   const [expandida, setExpandida] = useState<string | null>(null)
   const [agregandoUnidadEn, setAgregandoUnidadEn] = useState<string | null>(null)
+  const [ingresoInteligenteEn, setIngresoInteligenteEn] = useState<string | null>(null)
+  const [subiendoCroquisEn, setSubiendoCroquisEn] = useState<string | null>(null)
   const [verReparacionesCasa, setVerReparacionesCasa] = useState<string | null>(null)
 
   async function cargar() {
@@ -77,6 +80,35 @@ export default function PropiedadesPage() {
     const data = await res.json()
     if (data.error) return alert(data.error)
     cargar()
+  }
+
+  async function subirCroquis(propiedadId: string, archivo: File) {
+    setSubiendoCroquisEn(propiedadId)
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result as string)
+        reader.onerror = reject
+        reader.readAsDataURL(archivo)
+      })
+      const token = await obtenerToken()
+      const resSubida = await fetch('/api/subir-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ archivoBase64: base64, nombre: archivo.name }),
+      })
+      const dataSubida = await resSubida.json()
+      if (dataSubida.error) return alert(dataSubida.error)
+
+      await fetch(`/api/propiedades/${propiedadId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ croquisUrl: dataSubida.url }),
+      })
+      cargar()
+    } finally {
+      setSubiendoCroquisEn(null)
+    }
   }
 
   return (
@@ -138,6 +170,28 @@ export default function PropiedadesPage() {
 
             {abierta && (
               <div className="mt-4 pt-4 border-t border-line">
+                <div className="mb-4">
+                  <div className="font-body text-[11px] font-semibold text-ink mb-1.5">Croquis / mapa de referencia</div>
+                  {p.croquisUrl ? (
+                    <a href={p.croquisUrl} target="_blank" rel="noreferrer">
+                      <img src={p.croquisUrl} alt={`Croquis de ${p.nombre}`} className="max-w-full rounded-lg border border-line mb-2" style={{ maxHeight: 320 }} />
+                    </a>
+                  ) : (
+                    <div className="font-body text-[11px] text-inksoft mb-2">Todavía no subiste un croquis de esta propiedad.</div>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    disabled={subiendoCroquisEn === p.id}
+                    onChange={(e) => {
+                      const archivo = e.target.files?.[0]
+                      if (archivo) subirCroquis(p.id, archivo)
+                    }}
+                    className="font-body text-xs"
+                  />
+                  {subiendoCroquisEn === p.id && <div className="font-body text-[11px] text-inksoft mt-1">Subiendo...</div>}
+                </div>
+
                 {unidades.map((u) => (
                   <TarjetaUnidad key={u.id} unidad={u} onCambio={cargar} />
                 ))}
@@ -148,13 +202,27 @@ export default function PropiedadesPage() {
                     onGuardado={() => { setAgregandoUnidadEn(null); cargar() }}
                     onCancelar={() => setAgregandoUnidadEn(null)}
                   />
+                ) : ingresoInteligenteEn === p.id ? (
+                  <IngresoInteligenteEspacios
+                    propiedadId={p.id}
+                    onCreadas={() => { setIngresoInteligenteEn(null); cargar() }}
+                    onCancelar={() => setIngresoInteligenteEn(null)}
+                  />
                 ) : (
-                  <button
-                    onClick={() => setAgregandoUnidadEn(p.id)}
-                    className="w-full py-2.5 rounded-lg border border-dashed border-line font-body text-xs text-inksoft mb-3"
-                  >
-                    + Agregar departamento / habitación
-                  </button>
+                  <div className="flex gap-2 mb-3">
+                    <button
+                      onClick={() => setAgregandoUnidadEn(p.id)}
+                      className="flex-1 py-2.5 rounded-lg border border-dashed border-line font-body text-xs text-inksoft"
+                    >
+                      + Agregar un espacio
+                    </button>
+                    <button
+                      onClick={() => setIngresoInteligenteEn(p.id)}
+                      className="flex-1 py-2.5 rounded-lg border border-dashed border-line font-body text-xs text-inksoft"
+                    >
+                      ✨ Agregar varios (texto/audio)
+                    </button>
+                  </div>
                 )}
 
                 <button

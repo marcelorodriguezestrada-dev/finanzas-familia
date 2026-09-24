@@ -56,12 +56,27 @@ export async function POST(req: NextRequest) {
     const nombreLimpio = (nombre || 'contrato.pdf').replace(/[^a-zA-Z0-9._-]/g, '_')
     const rutaArchivo = `${Date.now()}-${sufijo}-${nombreLimpio}`
 
+    // Content-Type según la extensión real del archivo: este endpoint
+    // ya no sube solo PDFs de contrato, también fotos de croquis u
+    // otras imágenes de referencia, y hace falta el tipo correcto para
+    // que el navegador las muestre bien al abrir el link.
+    const extension = nombreLimpio.split('.').pop()?.toLowerCase() || ''
+    const tiposPorExtension: Record<string, string> = {
+      pdf: 'application/pdf',
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      png: 'image/png',
+      webp: 'image/webp',
+      gif: 'image/gif',
+    }
+    const contentType = tiposPorExtension[extension] || 'application/octet-stream'
+
     const resSubida = await fetch(`${supabaseUrl}/storage/v1/object/${BUCKET}/${rutaArchivo}`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${serviceKey}`,
         apikey: serviceKey,
-        'Content-Type': 'application/pdf',
+        'Content-Type': contentType,
         'x-upsert': 'false',
       },
       body: buffer,

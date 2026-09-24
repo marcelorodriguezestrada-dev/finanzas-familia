@@ -10,7 +10,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   try {
     const body = await req.json()
     const cambios: Record<string, unknown> = {}
-    for (const campo of ['nombre', 'direccion', 'notas']) {
+    for (const campo of ['nombre', 'direccion', 'notas', 'croquisUrl']) {
       if (body[campo] !== undefined) cambios[campo] = body[campo]
     }
     if (body.activo !== undefined) cambios.activo = !!body.activo

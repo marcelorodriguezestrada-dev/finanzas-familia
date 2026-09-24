@@ -202,9 +202,33 @@ export function FormAlquiler({
         setMostrarClausulas(true)
       }
 
-      setAvisoImportacion(
-        `Se precargaron los datos del contrato${data.direccionMencionada ? ` (menciona: "${data.direccionMencionada}")` : ''}. Elegí la propiedad y unidad correspondiente abajo, y revisá todo antes de guardar.`
-      )
+      // El servidor ya creó una plantilla nueva con las cláusulas
+      // reales de este contrato (ver /api/importar-contrato). Se
+      // agrega a la lista local y se tildan todas sus cláusulas de
+      // una, para que el contrato que se genere ahora las incluya tal
+      // como estaban redactadas en el original — así el sistema se
+      // retroalimenta con cada contrato viejo importado.
+      if (data.plantillaId && data.plantillaClausulas?.length > 0) {
+        setPlantillas((prev) => [{ id: data.plantillaId, nombre: data.plantillaNombre, clausulas: data.plantillaClausulas }, ...prev])
+        setClausulasPlantillaElegidas((prev) => {
+          const next = new Set(prev)
+          data.plantillaClausulas.forEach((_: ClausulaExtra, i: number) => next.add(`${data.plantillaId}::${i}`))
+          return next
+        })
+        setMostrarClausulas(true)
+      }
+
+      const partesAviso = [
+        `Se precargaron los datos del contrato${data.direccionMencionada ? ` (menciona: "${data.direccionMencionada}")` : ''}.`,
+      ]
+      if (data.plantillaId) {
+        partesAviso.push(`Se guardaron sus cláusulas como plantilla "${data.plantillaNombre}" y quedaron tildadas para este contrato.`)
+      }
+      if (data.notasAdicionales) {
+        partesAviso.push(`Nota: ${data.notasAdicionales}`)
+      }
+      partesAviso.push('Elegí la propiedad y unidad correspondiente abajo, y revisá todo antes de guardar.')
+      setAvisoImportacion(partesAviso.join(' '))
     } catch (err: any) {
       setError(err.message || 'No se pudo importar el contrato.')
     } finally {

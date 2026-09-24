@@ -60,6 +60,22 @@ export default function FamiliaPage() {
     }
   }
 
+  const [borrandoUid, setBorrandoUid] = useState<string | null>(null)
+
+  async function borrarMiembro(uid: string, nombre: string) {
+    if (!confirm(`¿Eliminar a ${nombre}? Va a perder el acceso a la app de inmediato. Esta acción no se puede deshacer.`)) return
+    setBorrandoUid(uid)
+    try {
+      const token = await obtenerToken()
+      const res = await fetch(`/api/familia/${uid}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
+      const data = await res.json()
+      if (data.error) return alert(data.error)
+      cargar()
+    } finally {
+      setBorrandoUid(null)
+    }
+  }
+
   return (
     <PaginaProtegida>
       <div className="font-display text-xl font-bold text-ink mb-1">Familia</div>
@@ -117,6 +133,13 @@ export default function FamiliaPage() {
                 </div>
                 <div className="font-body text-[11px] text-inksoft">{m.email}</div>
               </div>
+              <button
+                onClick={() => borrarMiembro(m.uid, m.nombre)}
+                disabled={borrandoUid === m.uid}
+                className="font-body text-[11px] text-rojo underline disabled:opacity-50"
+              >
+                {borrandoUid === m.uid ? 'Eliminando...' : 'Eliminar'}
+              </button>
             </div>
           ))}
         </div>

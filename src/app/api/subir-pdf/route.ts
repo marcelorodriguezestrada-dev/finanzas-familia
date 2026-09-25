@@ -86,7 +86,9 @@ export async function POST(req: NextRequest) {
       const detalle = await resSubida.text().catch(() => '')
       console.error('Supabase Storage rechazó la subida', resSubida.status, detalle)
       return NextResponse.json(
-        { error: 'Supabase no pudo guardar el archivo — revisá que el bucket "contratos" exista y esté marcado como público.' },
+        {
+          error: `Supabase no pudo guardar el archivo (código ${resSubida.status}): ${detalle || 'sin detalle'}. Revisá que el bucket "contratos" exista y esté marcado como público.`,
+        },
         { status: 502 }
       )
     }

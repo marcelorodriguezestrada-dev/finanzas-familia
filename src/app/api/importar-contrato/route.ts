@@ -17,6 +17,10 @@ type DatosImportados = {
   propietarios: { nombre: string; ci: string }[]
   inquilinoTelefono: string | null
   montoMensual: number | null
+  // Canon escalonado: tramos en orden. meses = cantidad de meses
+  // completos del tramo; null en el último si dura "hasta el final".
+  tramosCanon: { monto: number; meses: number | null }[]
+  proporcionalInicio: boolean | null
   anticipo: number | null
   diaCobro: number | null
   fechaInicio: string | null // YYYY-MM-DD
@@ -81,16 +85,18 @@ export async function POST(req: NextRequest) {
 
 Reglas:
 - Fechas siempre en formato YYYY-MM-DD. Si el contrato dice "20 de septiembre de 2026", devolvé "2026-09-20".
-- Montos como número (sin "Bs", sin puntos de miles, sin texto). Si hay un esquema de canon ESCALONADO (distinto monto en distintos meses) o cualquier otra condición de pago que no sea un monto fijo simple, devolvé en montoMensual el PRIMER monto mensual pactado, y describí el esquema completo (todos los tramos, con sus fechas o meses) en notasAdicionales para que el usuario lo vea y decida cómo manejarlo.
+- Montos como número (sin "Bs", sin puntos de miles, sin texto). En montoMensual devolvé el PRIMER monto mensual pactado (el del primer tramo si es escalonado).
+- tramosCanon: el canon mes a mes en tramos, EN ORDEN. Cada tramo es {"monto": número, "meses": cantidad de meses COMPLETOS que dura}. En el último tramo, si dura "hasta la conclusión del contrato" / "por el resto del año", poné meses: null. Los días sueltos del primer mes que se pagan en forma proporcional NO cuentan como mes. Ejemplo: "primeros 3 meses Bs 2.300 (octubre a diciembre) y a partir del 4.º mes Bs 2.500 hasta la conclusión" -> [{"monto": 2300, "meses": 3}, {"monto": 2500, "meses": null}]. Si el canon es fijo, un solo tramo con meses: null.
+- proporcionalInicio: true si el contrato establece que el primer mes (incompleto) se paga en forma proporcional a los días; false si dice que se paga completo; null si no lo menciona.
 - diaCobro es el día del mes límite para pagar (ej: si dice "dentro de los primeros 5 días", diaCobro es 5).
 - inquilinos y propietarios: un objeto por persona con nombre completo y número de C.I. (sin puntos ni la palabra "N°"). Si no hay C.I. visible para alguien, poné ci: "". Incluí a TODAS las personas mencionadas de cada lado, no solo la primera.
 - clausulasDetectadas: de esta lista de temas posibles, incluí SOLO los ids cuyo tema efectivamente aparece mencionado en el contrato:
 ${listaClausulasDetectables}
 - direccionMencionada: la dirección o referencia del inmueble tal como aparece en el texto.
-- notasAdicionales: cualquier condición relevante que no encaje en los campos anteriores (esquemas de pago escalonados o proporcionales, comisiones bancarias, prorrateo de servicios, muebles en custodia, restricciones de acceso, etc.), resumida en 2-4 líneas. null si no hay nada así de particular.
+- notasAdicionales: cualquier condición relevante que no encaje en los campos anteriores (comisiones bancarias, prorrateo de servicios, muebles en custodia, restricciones de acceso, etc.), resumida en 2-4 líneas. null si no hay nada así de particular.
 - nombrePlantillaSugerido: un nombre corto (3-6 palabras) para identificar este contrato como plantilla reutilizable, ej. "Contrato vivienda familiar Potosí".
 - Respondé SOLO con un objeto JSON, sin texto antes ni después, con esta forma exacta:
-{"inquilinos": [{"nombre": "", "ci": ""}], "propietarios": [{"nombre": "", "ci": ""}], "inquilinoTelefono": null, "montoMensual": null, "anticipo": null, "diaCobro": null, "fechaInicio": null, "fechaFin": null, "clausulasDetectadas": [], "direccionMencionada": null, "notasAdicionales": null, "nombrePlantillaSugerido": null}`
+{"inquilinos": [{"nombre": "", "ci": ""}], "propietarios": [{"nombre": "", "ci": ""}], "inquilinoTelefono": null, "montoMensual": null, "tramosCanon": [], "proporcionalInicio": null, "anticipo": null, "diaCobro": null, "fechaInicio": null, "fechaFin": null, "clausulasDetectadas": [], "direccionMencionada": null, "notasAdicionales": null, "nombrePlantillaSugerido": null}`
 
     const systemPromptClausulas = `Analizás contratos de alquiler de vivienda en Bolivia. Se te da el texto completo (o parcial) de un contrato real. Tu trabajo es identificar sus cláusulas y devolverlas separadas, cada una con un título corto y su texto completo tal como aparece en el documento (podés limpiar saltos de línea raros de la extracción, pero no reescribas el contenido).
 
@@ -117,6 +123,10 @@ Reglas:
       propietarios: (datos.propietarios || []).filter((p) => p?.nombre?.trim()),
       inquilinoTelefono: datos.inquilinoTelefono || null,
       montoMensual: typeof datos.montoMensual === 'number' ? datos.montoMensual : null,
+      tramosCanon: (Array.isArray(datos.tramosCanon) ? datos.tramosCanon : [])
+        .map((t: any) => ({ monto: Number(t?.monto), meses: t?.meses === null || t?.meses === undefined ? null : Math.floor(Number(t.meses)) || null }))
+        .filter((t) => Number.isFinite(t.monto) && t.monto > 0),
+      proporcionalInicio: typeof datos.proporcionalInicio === 'boolean' ? datos.proporcionalInicio : null,
       anticipo: typeof datos.anticipo === 'number' ? datos.anticipo : null,
       diaCobro: typeof datos.diaCobro === 'number' ? datos.diaCobro : null,
       fechaInicio: datos.fechaInicio || null,

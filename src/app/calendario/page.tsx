@@ -3,10 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@/lib/auth'
 import { PaginaProtegida } from '@/components/PaginaProtegida'
-
-function bs(n: number) {
-  return 'Bs ' + n.toLocaleString('es-BO', { minimumFractionDigits: 0 })
-}
+import { cuotaDelMes, formatoBs } from '@/lib/esquemaPago'
 
 function diasEntre(hoyISO: string, fechaISO: string) {
   const hoy = new Date(hoyISO)
@@ -58,26 +55,32 @@ export default function CalendarioPage() {
   // Alquileres cuyo alquiler de este mes todavía no aparece como
   // movimiento cobrado y ya pasó (o está por pasar) su día de cobro —
   // es la "mora" del punto 4: quién todavía no pagó este mes.
+  // El monto y el vencimiento salen del plan de pago de cada alquiler
+  // (canon escalonado, proporcional del primer mes que vence a la
+  // firma, etc.). Si según el contrato no hay cuota este mes, no entra.
+  const conCuota = useMemo(
+    () =>
+      alquileres
+        .map((a) => ({ ...a, cuota: cuotaDelMes(a, mesActual) }))
+        .filter((a) => a.cuota && !movimientosMes.some((m) => m.alquilerId === a.id)),
+    [alquileres, movimientosMes, mesActual]
+  )
+
   const enMora = useMemo(() => {
-    return alquileres.filter((a) => {
-      const yaCobrado = movimientosMes.some((m) => m.alquilerId === a.id)
-      if (yaCobrado) return false
-      const diaHoy = Number(hoy.slice(8, 10))
-      return diaHoy >= a.diaCobro
-    })
-  }, [alquileres, movimientosMes, hoy])
+    // Pasado el día límite de pago (el contrato dice "dentro de los
+    // primeros N días"), ya está en mora.
+    return conCuota.filter((a) => hoy > a.cuota!.vence)
+  }, [conCuota, hoy])
 
   // Próximos días de cobro de este mes que todavía no llegaron.
   const proximosCobros = useMemo(() => {
-    return alquileres
+    return conCuota
       .filter((a) => {
-        const yaCobrado = movimientosMes.some((m) => m.alquilerId === a.id)
-        if (yaCobrado) return false
-        const diaHoy = Number(hoy.slice(8, 10))
-        return a.diaCobro > diaHoy && a.diaCobro <= diaHoy + 7
+        const dias = diasEntre(hoy, a.cuota!.vence)
+        return dias >= 0 && dias <= 7
       })
-      .sort((a, b) => a.diaCobro - b.diaCobro)
-  }, [alquileres, movimientosMes, hoy])
+      .sort((a, b) => a.cuota!.vence.localeCompare(b.cuota!.vence))
+  }, [conCuota, hoy])
 
   // Contratos que vencen en los próximos 60 días, o ya vencidos.
   const vencimientos = useMemo(() => {
@@ -105,7 +108,7 @@ export default function CalendarioPage() {
             <div key={a.id} className="bg-rojosoft border border-rojo rounded-lg p-3 mb-2">
               <div className="font-body text-xs font-semibold text-ink">{a.inquilinoNombre}</div>
               <div className="font-body text-[11px] text-inksoft">
-                {nombrePropiedad(a.propiedadId)} — {nombreUnidad(a.unidadId)} · {bs(a.montoMensual)} · vencía el día {a.diaCobro}
+                {nombrePropiedad(a.propiedadId)} — {nombreUnidad(a.unidadId)} · {formatoBs(a.cuota!.monto)}{a.cuota!.tipo !== 'completa' ? ` (proporcional ${a.cuota!.dias} días)` : ''} · vencía el {a.cuota!.vence.slice(8, 10)}/{a.cuota!.vence.slice(5, 7)}
               </div>
             </div>
           ))}
@@ -116,7 +119,7 @@ export default function CalendarioPage() {
             <div key={a.id} className="border border-line rounded-lg p-3 mb-2">
               <div className="font-body text-xs font-semibold text-ink">{a.inquilinoNombre}</div>
               <div className="font-body text-[11px] text-inksoft">
-                {nombrePropiedad(a.propiedadId)} — {nombreUnidad(a.unidadId)} · {bs(a.montoMensual)} · día {a.diaCobro}
+                {nombrePropiedad(a.propiedadId)} — {nombreUnidad(a.unidadId)} · {formatoBs(a.cuota!.monto)} · vence el {a.cuota!.vence.slice(8, 10)}/{a.cuota!.vence.slice(5, 7)}
               </div>
             </div>
           ))}

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDb, requerirUsuarioAprobado } from '@/lib/firebaseAdmin'
+import { normalizarEsquema } from '@/lib/esquemaPago'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,6 +19,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       if (body[campo] !== undefined) cambios[campo] = body[campo]
     }
     if (body.montoMensual !== undefined) cambios.montoMensual = Number(body.montoMensual)
+    if (body.esquemaPago !== undefined) {
+      const esquema = normalizarEsquema(body.esquemaPago, Number(body.montoMensual) || undefined)
+      cambios.esquemaPago = esquema
+      if (esquema) cambios.montoMensual = esquema.tramos[0].monto
+    }
+    if (body.contratoUrl) cambios.contratoSubidoEn = new Date().toISOString()
     if (body.anticipo !== undefined) cambios.anticipo = body.anticipo ? Number(body.anticipo) : null
 
     // Finalizar o rescindir un alquiler libera la unidad para que se

@@ -6,10 +6,19 @@ import { subirArchivo } from '@/lib/subirArchivo'
 import { detectarVariacion } from '@/data/inmuebles'
 import { CLAUSULAS_DISPONIBLES, CLAUSULAS_POR_DEFECTO, ClausulaId } from '@/lib/plantillaContrato'
 import { EscanerCedula } from '@/components/EscanerCedula'
+import { SubirFirma } from '@/components/SubirFirma'
+import { ResumenPago } from '@/components/ResumenPago'
+import { EditorCanon, CanonForm, esquemaDesdeCanonForm, canonFormValido } from '@/components/EditorCanon'
 
 type ClausulaExtra = { titulo: string; texto: string }
 type Plantilla = { id: string; nombre: string; clausulas: ClausulaExtra[] }
-type PersonaForm = { nombre: string; ci: string }
+type PersonaForm = { nombre: string; ci: string; firma?: string | null }
+
+function sumarUnAnio(iso: string) {
+  const [a, m, d] = iso.split('-').map(Number)
+  if (!a) return ''
+  return `${a + 1}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+}
 
 function bs(n: number) {
   return 'Bs ' + n.toLocaleString('es-BO', { minimumFractionDigits: 0 })
@@ -36,6 +45,7 @@ export function FormAlquiler({
   const [inquilinoCI, setInquilinoCI] = useState('')
   const [inquilinoTelefono, setInquilinoTelefono] = useState('')
   const [inquilinoDireccionAnterior, setInquilinoDireccionAnterior] = useState('')
+  const [inquilinoFirma, setInquilinoFirma] = useState<string | null>(null)
   // Inquilinos adicionales, solo para el contrato en PDF (el registro
   // del alquiler en la base sigue guardando un único inquilino
   // principal — inquilinoNombre/inquilinoCI arriba — para no romper
@@ -45,8 +55,22 @@ export function FormAlquiler({
   // miembros de la familia tildados (así el contrato sale con todos
   // los dueños listos para firmar), pero se pueden destildar o
   // completar su C.I.
-  const [propietariosSeleccion, setPropietariosSeleccion] = useState<Record<string, { incluido: boolean; ci: string }>>({})
-  const [montoMensual, setMontoMensual] = useState(unidad.canonEstandar?.toString() || '')
+  const [propietariosSeleccion, setPropietariosSeleccion] = useState<Record<string, { incluido: boolean; ci: string; firma?: string | null }>>({})
+  // Propietarios que firman pero no tienen cuenta en la app (ej. la
+  // mamá o una hermana que figura en los papeles de la casa).
+  const [propietariosExtra, setPropietariosExtra] = useState<PersonaForm[]>([])
+
+  // Canon: uno o más tramos. Con un solo tramo es un canon fijo; con
+  // varios, escalonado (ej. Bs 2.300 x 3 meses y después Bs 2.500
+  // hasta el final).
+  const [canon, setCanon] = useState<CanonForm>({
+    tramos: [{ monto: unidad.canonEstandar?.toString() || '', meses: '' }],
+    proporcionalInicio: true,
+    proporcionalFin: true,
+  })
+  const [ciudadFirma, setCiudadFirma] = useState('Potosí')
+  const [incluirCronograma, setIncluirCronograma] = useState(true)
+  const montoMensual = canon.tramos[0]?.monto || ''
   const [anticipo, setAnticipo] = useState('')
   const [diaCobro, setDiaCobro] = useState('1')
   const [fechaInicio, setFechaInicio] = useState(hoyISO())
@@ -103,7 +127,9 @@ export function FormAlquiler({
     setPropietariosSeleccion((prev) => {
       const next = { ...prev }
       for (const m of miembros) {
-        if (!next[m.uid]) next[m.uid] = { incluido: true, ci: '' }
+        // C.I. y firma guardadas en el perfil de cada uno (ver "Guardar
+        // como mi firma") se precargan solas.
+        if (!next[m.uid]) next[m.uid] = { incluido: true, ci: m.ci || '', firma: m.firmaDataUrl || null }
       }
       return next
     })
@@ -135,12 +161,33 @@ export function FormAlquiler({
     setPropietariosSeleccion((prev) => ({ ...prev, [uid]: { ...prev[uid], ci } }))
   }
 
+  function setFirmaPropietario(uid: string, firma: string | null) {
+    setPropietariosSeleccion((prev) => ({ ...prev, [uid]: { ...prev[uid], firma } }))
+  }
+
+  // Guarda C.I. y firma en el perfil propio, para no volver a
+  // cargarlas en cada contrato.
+  async function guardarMiFirma(firma: string) {
+    const token = await obtenerToken()
+    const res = await fetch('/api/perfil', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ firmaDataUrl: firma, ci: usuario ? propietariosSeleccion[usuario.uid]?.ci || undefined : undefined }),
+    })
+    const data = await res.json()
+    if (!res.ok || data.error) throw new Error(data.error || 'No se pudo guardar la firma.')
+  }
+
   function agregarInquilinoExtra() {
     setInquilinosExtra((prev) => [...prev, { nombre: '', ci: '' }])
   }
 
-  function actualizarInquilinoExtra(i: number, campo: 'nombre' | 'ci', valor: string) {
+  function actualizarInquilinoExtra(i: number, campo: 'nombre' | 'ci' | 'firma', valor: string | null) {
     setInquilinosExtra((prev) => prev.map((p, idx) => (idx === i ? { ...p, [campo]: valor } : p)))
+  }
+
+  function actualizarPropietarioExtra(i: number, campo: 'nombre' | 'ci' | 'firma', valor: string | null) {
+    setPropietariosExtra((prev) => prev.map((p, idx) => (idx === i ? { ...p, [campo]: valor } : p)))
   }
 
   function quitarInquilinoExtra(i: number) {
@@ -192,7 +239,19 @@ export function FormAlquiler({
         })
       }
       if (data.inquilinoTelefono) setInquilinoTelefono(data.inquilinoTelefono)
-      if (data.montoMensual) setMontoMensual(String(data.montoMensual))
+      if (data.tramosCanon?.length > 0 || data.montoMensual) {
+        setCanon((prev) => ({
+          ...prev,
+          tramos:
+            data.tramosCanon?.length > 0
+              ? data.tramosCanon.map((t: { monto: number; meses: number | null }, i: number, arr: any[]) => ({
+                  monto: String(t.monto),
+                  meses: i === arr.length - 1 ? '' : String(t.meses || 1),
+                }))
+              : [{ monto: String(data.montoMensual), meses: '' }],
+          proporcionalInicio: typeof data.proporcionalInicio === 'boolean' ? data.proporcionalInicio : prev.proporcionalInicio,
+        }))
+      }
       if (data.anticipo) setAnticipo(String(data.anticipo))
       if (data.diaCobro) setDiaCobro(String(data.diaCobro))
       if (data.fechaInicio) setFechaInicio(data.fechaInicio)
@@ -275,10 +334,18 @@ export function FormAlquiler({
 
   const variacionPreview = montoMensual ? detectarVariacion(Number(montoMensual), Number(unidad.canonEstandar || 0)) : null
 
+  // Esquema de pago armado a partir de lo que hay en pantalla. Es la
+  // misma estructura que se guarda en el alquiler y que usa el PDF.
+  const esquemaPago = esquemaDesdeCanonForm(canon)
+
   async function generarContratoPDF() {
     setError('')
     if (!inquilinoNombre.trim() || !inquilinoCI.trim() || !montoMensual) {
       setError('Completá al menos nombre, C.I. y monto mensual antes de generar el contrato.')
+      return
+    }
+    if (!canonFormValido(canon)) {
+      setError('Cada tramo del canon necesita un monto.')
       return
     }
     setGenerandoContrato(true)
@@ -288,14 +355,17 @@ export function FormAlquiler({
 
       // Propietarios firmantes: los miembros tildados, con su C.I. si
       // se completó (si no, van sin C.I. en el documento).
-      const propietarios: PersonaForm[] = miembros
-        .filter((m) => propietariosSeleccion[m.uid]?.incluido)
-        .map((m) => ({ nombre: m.nombre, ci: propietariosSeleccion[m.uid]?.ci || '' }))
+      const propietarios: PersonaForm[] = [
+        ...miembros
+          .filter((m) => propietariosSeleccion[m.uid]?.incluido)
+          .map((m) => ({ nombre: m.nombre, ci: propietariosSeleccion[m.uid]?.ci || '', firma: propietariosSeleccion[m.uid]?.firma || null })),
+        ...propietariosExtra.filter((p) => p.nombre.trim()),
+      ]
 
       // Inquilinos: el principal (nombre/CI de arriba) más los
       // adicionales que se hayan cargado.
       const inquilinos: PersonaForm[] = [
-        { nombre: inquilinoNombre, ci: inquilinoCI },
+        { nombre: inquilinoNombre, ci: inquilinoCI, firma: inquilinoFirma },
         ...inquilinosExtra.filter((p) => p.nombre.trim() || p.ci.trim()),
       ]
 
@@ -322,10 +392,13 @@ export function FormAlquiler({
           inquilinoTelefono,
           inquilinoDireccionAnterior,
           montoMensual: Number(montoMensual),
+          esquemaPago,
           anticipo: anticipo ? Number(anticipo) : null,
           diaCobro: Number(diaCobro),
           fechaInicio,
           fechaFin: fechaFin || null,
+          ciudadFirma,
+          incluirCronograma,
           administradorNombre,
           clausulasSeleccionadas: Array.from(clausulasElegidas),
           clausulasExtra: [...clausulasDePlantillas, ...clausulasExtra],
@@ -370,6 +443,7 @@ export function FormAlquiler({
     if (!inquilinoNombre.trim() || !inquilinoCI.trim()) return setError('Faltan datos del inquilino (nombre y C.I.).')
     if (!montoMensual || Number(montoMensual) <= 0) return setError('Cargá el monto mensual acordado.')
     if (!administradorUid) return setError('Indicá quién de la familia administra este espacio.')
+    if (!canonFormValido(canon)) return setError('Cada tramo del canon necesita un monto.')
     // Subir el contrato firmado ya no es obligatorio: se puede
     // registrar el alquiler y subirlo (o modificarlo) más adelante.
 
@@ -383,7 +457,7 @@ export function FormAlquiler({
         body: JSON.stringify({
           unidadId: unidad.id,
           inquilinoNombre, inquilinoCI, inquilinoTelefono, inquilinoDireccionAnterior,
-          montoMensual, anticipo: anticipo || null, diaCobro, fechaInicio, fechaFin: fechaFin || null,
+          montoMensual, esquemaPago, anticipo: anticipo || null, diaCobro, fechaInicio, fechaFin: fechaFin || null,
           administradorUid, administradorNombre, contratoUrl,
         }),
       })
@@ -433,6 +507,9 @@ export function FormAlquiler({
           }}
         />
       </div>
+      <div className="mb-3">
+        <SubirFirma valor={inquilinoFirma} onCambio={setInquilinoFirma} etiqueta="Firma del inquilino (foto, opcional)" />
+      </div>
 
       {inquilinosExtra.map((p, i) => (
         <div key={i} className="mb-3 border-t border-line pt-3">
@@ -459,6 +536,9 @@ export function FormAlquiler({
               if (datos.ci) actualizarInquilinoExtra(i, 'ci', datos.ci)
             }}
           />
+          <div className="mt-2">
+            <SubirFirma valor={p.firma} onCambio={(f) => actualizarInquilinoExtra(i, 'firma', f)} etiqueta="Firma (foto, opcional)" />
+          </div>
         </div>
       ))}
       <button type="button" onClick={agregarInquilinoExtra} className="font-body text-[11px] text-ink underline mb-4">
@@ -466,38 +546,50 @@ export function FormAlquiler({
       </button>
 
 
-      <div className="font-body text-sm font-semibold text-ink mb-1">Condiciones de pago</div>
-      <div className="grid sm:grid-cols-3 gap-3 mb-1">
+      <div className="font-body text-sm font-semibold text-ink mb-1">Plazo del contrato</div>
+      <div className="grid sm:grid-cols-2 gap-3 mb-4">
         <div>
-          <label className="font-body text-[11px] text-inksoft block mb-1">Monto mensual (Bs)</label>
-          <input value={montoMensual} onChange={(e) => setMontoMensual(e.target.value)} type="number" className="w-full px-3.5 py-2.5 rounded-lg border border-line font-body text-sm" />
+          <label className="font-body text-[11px] text-inksoft block mb-1">Fecha de inicio (entrada)</label>
+          <input value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} type="date" className="w-full px-3.5 py-2.5 rounded-lg border border-line font-body text-sm" />
+        </div>
+        <div>
+          <label className="font-body text-[11px] text-inksoft block mb-1">
+            Vencimiento / entrega (opcional){' '}
+            <button type="button" onClick={() => setFechaFin(sumarUnAnio(fechaInicio))} className="text-ink underline">
+              1 año
+            </button>
+          </label>
+          <input value={fechaFin} onChange={(e) => setFechaFin(e.target.value)} type="date" className="w-full px-3.5 py-2.5 rounded-lg border border-line font-body text-sm" />
+        </div>
+      </div>
+
+      <div className="font-body text-sm font-semibold text-ink mb-1">Canon de alquiler</div>
+      <div className="font-body text-[11px] text-inksoft mb-2">
+        Un solo monto = canon fijo. Para un canon <b>escalonado</b> (ej. Bs 2.300 los primeros 3 meses y después Bs 2.500 hasta el final),
+        agregá un aumento. Los meses se cuentan desde el primer mes completo.
+      </div>
+      <div className="mb-3">
+        <EditorCanon valor={canon} onCambio={setCanon} fechaInicio={fechaInicio} fechaFin={fechaFin || null} />
+      </div>
+
+      {variacionPreview && (
+        <div className={`font-body text-[11px] -mt-1 mb-3 ${variacionPreview.esMenor ? 'text-amber-600' : 'text-verde'}`}>
+          ⚠ Canon inicial: {variacionPreview.texto} (canon: {bs(Number(unidad.canonEstandar))})
+        </div>
+      )}
+
+      <div className="grid sm:grid-cols-2 gap-3 mb-3">
+        <div>
+          <label className="font-body text-[11px] text-inksoft block mb-1">Paga dentro de los primeros ... días de cada mes</label>
+          <input value={diaCobro} onChange={(e) => setDiaCobro(e.target.value)} type="number" min={1} max={28} className="w-full px-3.5 py-2.5 rounded-lg border border-line font-body text-sm" />
         </div>
         <div>
           <label className="font-body text-[11px] text-inksoft block mb-1">Anticipo / garantía (opcional)</label>
           <input value={anticipo} onChange={(e) => setAnticipo(e.target.value)} type="number" className="w-full px-3.5 py-2.5 rounded-lg border border-line font-body text-sm" />
         </div>
-        <div>
-          <label className="font-body text-[11px] text-inksoft block mb-1">Día de cobro</label>
-          <input value={diaCobro} onChange={(e) => setDiaCobro(e.target.value)} type="number" min={1} max={31} className="w-full px-3.5 py-2.5 rounded-lg border border-line font-body text-sm" />
-        </div>
       </div>
 
-      {variacionPreview && (
-        <div className={`font-body text-[11px] mt-1.5 mb-3 ${variacionPreview.esMenor ? 'text-amber-600' : 'text-verde'}`}>
-          ⚠ {variacionPreview.texto} (canon: {bs(Number(unidad.canonEstandar))})
-        </div>
-      )}
-
-      <div className="grid sm:grid-cols-2 gap-3 mb-4 mt-3">
-        <div>
-          <label className="font-body text-[11px] text-inksoft block mb-1">Fecha de inicio</label>
-          <input value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} type="date" className="w-full px-3.5 py-2.5 rounded-lg border border-line font-body text-sm" />
-        </div>
-        <div>
-          <label className="font-body text-[11px] text-inksoft block mb-1">Vencimiento del contrato (opcional)</label>
-          <input value={fechaFin} onChange={(e) => setFechaFin(e.target.value)} type="date" className="w-full px-3.5 py-2.5 rounded-lg border border-line font-body text-sm" />
-        </div>
-      </div>
+      <ResumenPago fechaInicio={fechaInicio} fechaFin={fechaFin || null} diaCobro={Number(diaCobro) || 1} esquema={esquemaPago} />
 
       <div className="font-body text-sm font-semibold text-ink mb-1">Administración</div>
       <select value={administradorUid} onChange={(e) => setAdministradorUid(e.target.value)} className="w-full px-3.5 py-2.5 rounded-lg border border-line font-body text-sm bg-white mb-4">
@@ -513,28 +605,77 @@ export function FormAlquiler({
       </div>
       <div className="mb-4">
         {miembros.map((m) => (
-          <div key={m.uid} className="flex items-center gap-2 py-1">
-            <label className="flex items-center gap-2 font-body text-xs text-ink flex-1">
-              <input
-                type="checkbox"
-                checked={propietariosSeleccion[m.uid]?.incluido ?? true}
-                onChange={() => togglePropietario(m.uid)}
-              />
-              {m.nombre}
-            </label>
+          <div key={m.uid} className="py-1.5 border-b border-line last:border-b-0">
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-2 font-body text-xs text-ink flex-1">
+                <input
+                  type="checkbox"
+                  checked={propietariosSeleccion[m.uid]?.incluido ?? true}
+                  onChange={() => togglePropietario(m.uid)}
+                />
+                {m.nombre}
+              </label>
+              {propietariosSeleccion[m.uid]?.incluido && (
+                <input
+                  value={propietariosSeleccion[m.uid]?.ci || ''}
+                  onChange={(e) => setCIPropietario(m.uid, e.target.value)}
+                  placeholder="C.I. (opcional)"
+                  className="w-36 px-2.5 py-1.5 rounded-lg border border-line font-body text-xs"
+                />
+              )}
+            </div>
             {propietariosSeleccion[m.uid]?.incluido && (
-              <input
-                value={propietariosSeleccion[m.uid]?.ci || ''}
-                onChange={(e) => setCIPropietario(m.uid, e.target.value)}
-                placeholder="C.I. (opcional)"
-                className="w-32 px-2.5 py-1.5 rounded-lg border border-line font-body text-xs"
-              />
+              <div className="mt-1.5 ml-6">
+                <SubirFirma
+                  valor={propietariosSeleccion[m.uid]?.firma}
+                  onCambio={(f) => setFirmaPropietario(m.uid, f)}
+                  etiqueta="Firma (foto, opcional)"
+                  onGuardarComoMia={m.uid === usuario?.uid ? guardarMiFirma : undefined}
+                />
+              </div>
             )}
           </div>
         ))}
+        {propietariosExtra.map((p, i) => (
+          <div key={`extra-${i}`} className="py-1.5 border-b border-line last:border-b-0">
+            <div className="grid sm:grid-cols-[1fr_9rem_auto] gap-2">
+              <input
+                value={p.nombre}
+                onChange={(e) => actualizarPropietarioExtra(i, 'nombre', e.target.value)}
+                placeholder="Nombre completo (propietario sin cuenta)"
+                className="px-2.5 py-1.5 rounded-lg border border-line font-body text-xs"
+              />
+              <input
+                value={p.ci}
+                onChange={(e) => actualizarPropietarioExtra(i, 'ci', e.target.value)}
+                placeholder="C.I."
+                className="px-2.5 py-1.5 rounded-lg border border-line font-body text-xs"
+              />
+              <button type="button" onClick={() => setPropietariosExtra((prev) => prev.filter((_, idx) => idx !== i))} className="font-body text-[11px] text-rojo px-1">
+                Quitar
+              </button>
+            </div>
+            <div className="mt-1.5">
+              <SubirFirma valor={p.firma} onCambio={(f) => actualizarPropietarioExtra(i, 'firma', f)} etiqueta="Firma (foto, opcional)" />
+            </div>
+          </div>
+        ))}
+        <button type="button" onClick={() => setPropietariosExtra((prev) => [...prev, { nombre: '', ci: '' }])} className="font-body text-[11px] text-ink underline mt-2">
+          + Agregar propietario que no tiene cuenta en la app
+        </button>
       </div>
 
       <div className="font-body text-sm font-semibold text-ink mb-1">Contrato</div>
+      <div className="grid sm:grid-cols-2 gap-3 mb-2">
+        <div>
+          <label className="font-body text-[11px] text-inksoft block mb-1">Ciudad donde se firma</label>
+          <input value={ciudadFirma} onChange={(e) => setCiudadFirma(e.target.value)} className="w-full px-3.5 py-2.5 rounded-lg border border-line font-body text-sm" />
+        </div>
+        <label className="flex items-center gap-2 font-body text-xs text-ink sm:mt-5">
+          <input type="checkbox" checked={incluirCronograma} onChange={(e) => setIncluirCronograma(e.target.checked)} />
+          Agregar Anexo I con el cronograma de pagos mes a mes
+        </label>
+      </div>
 
       <button
         type="button"
@@ -646,7 +787,7 @@ export function FormAlquiler({
       )}
 
       <button type="button" onClick={generarContratoPDF} disabled={generandoContrato} className="w-full py-2.5 rounded-lg border border-line font-body text-sm text-ink mb-3 disabled:opacity-60">
-        {generandoContrato ? 'Generando...' : '📄 Generar contrato automáticamente (PDF para imprimir y firmar)'}
+        {generandoContrato ? 'Generando...' : '📄 Generar contrato en PDF (a color, con resumen y cronograma de pago)'}
       </button>
 
       <label className="font-body text-[11px] text-inksoft block mb-1">Subir el contrato ya firmado (imagen o PDF) — opcional</label>

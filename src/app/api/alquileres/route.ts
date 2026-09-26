@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDb, requerirUsuarioAprobado } from '@/lib/firebaseAdmin'
 import { detectarVariacion } from '@/data/inmuebles'
+import { normalizarEsquema } from '@/lib/esquemaPago'
 
 export const dynamic = 'force-dynamic'
 
@@ -46,7 +47,7 @@ export async function POST(req: NextRequest) {
     const {
       unidadId, inquilinoNombre, inquilinoCI, inquilinoTelefono, inquilinoDireccionAnterior,
       montoMensual, anticipo, diaCobro, fechaInicio, fechaFin,
-      administradorUid, administradorNombre, contratoUrl,
+      administradorUid, administradorNombre, contratoUrl, esquemaPago,
     } = body
 
     if (!unidadId || !inquilinoNombre || !inquilinoCI) {
@@ -61,12 +62,9 @@ export async function POST(req: NextRequest) {
     if (!administradorUid) {
       return NextResponse.json({ error: 'Indicá quién de la familia administra este espacio.' }, { status: 400 })
     }
-    // El contrato firmado es obligatorio, a pedido explícito: sin
-    // respaldo digital no se registra el alquiler. Si todavía no lo
-    // tenés escaneado, el alquiler no se crea — es a propósito.
-    if (!contratoUrl) {
-      return NextResponse.json({ error: 'Adjuntá el contrato firmado para poder registrar el alquiler.' }, { status: 400 })
-    }
+    // El contrato firmado ya no es obligatorio para registrar el
+    // alquiler (se puede subir después): el formulario lo avisa así,
+    // y la API ahora es coherente con eso.
 
     const db = getDb()
     const unidadDoc = await db.collection('unidades').doc(unidadId).get()
@@ -84,7 +82,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Esta unidad ya tiene un alquiler activo. Finalizalo antes de cargar uno nuevo.' }, { status: 409 })
     }
 
-    const monto = Number(montoMensual)
+    // Esquema de pago (canon fijo o escalonado). El montoMensual que
+    // se guarda es el del PRIMER tramo, para que todo lo que ya usaba
+    // ese campo siga funcionando; el monto real de cada mes sale del
+    // esquema (ver cuotaDelMes en src/lib/esquemaPago.ts).
+    const esquema = normalizarEsquema(esquemaPago, Number(montoMensual))
+    const monto = esquema ? esquema.tramos[0].monto : Number(montoMensual)
     const variacion = detectarVariacion(monto, Number(unidad.canonEstandar || 0))
 
     const ref = await db.collection('alquileres').add({
@@ -95,14 +98,15 @@ export async function POST(req: NextRequest) {
       inquilinoTelefono: inquilinoTelefono || '',
       inquilinoDireccionAnterior: inquilinoDireccionAnterior || '',
       montoMensual: monto,
+      esquemaPago: esquema,
       anticipo: anticipo ? Number(anticipo) : null,
       diaCobro: diaCobro ? Number(diaCobro) : 1,
       fechaInicio,
       fechaFin: fechaFin || null,
       administradorUid,
       administradorNombre: administradorNombre || '',
-      contratoUrl,
-      contratoSubidoEn: new Date().toISOString(),
+      contratoUrl: contratoUrl || null,
+      contratoSubidoEn: contratoUrl ? new Date().toISOString() : null,
       // Dejamos guardada la variación detectada al momento de firmar —
       // sirve después para explicar por qué esta unidad rinde distinto
       // a su canon en el dashboard, sin tener que recalcularlo.

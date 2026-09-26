@@ -13,6 +13,16 @@ export async function GET(req: NextRequest) {
 
   try {
     const mes = req.nextUrl.searchParams.get('mes')
+    // ?alquilerId= devuelve solo los cobros de un alquiler (para marcar
+    // los meses cobrados en su cronograma). Sin orderBy en la consulta
+    // para no requerir un índice compuesto: se ordena en memoria.
+    const alquilerId = req.nextUrl.searchParams.get('alquilerId')
+    if (alquilerId) {
+      const snap = await getDb().collection('movimientos').where('alquilerId', '==', alquilerId).get()
+      const movimientos = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as any[]
+      movimientos.sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''))
+      return NextResponse.json({ movimientos })
+    }
     let query = getDb().collection('movimientos').orderBy('fecha', 'desc') as FirebaseFirestore.Query
     if (mes) {
       query = query.where('fecha', '>=', `${mes}-01`).where('fecha', '<=', `${mes}-31`)

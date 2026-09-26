@@ -6,6 +6,10 @@ import { useAuth } from '@/lib/auth'
 import { PaginaProtegida } from '@/components/PaginaProtegida'
 import { FormAlquiler } from './_componentes/FormAlquiler'
 import { mesActual } from '@/data/categorias'
+import { ResumenPago } from '@/components/ResumenPago'
+import { EditorCanon, CanonForm, canonFormDesdeEsquema, esquemaDesdeCanonForm, canonFormValido } from '@/components/EditorCanon'
+import { cuotaDelMes, esquemaDeAlquiler, esEscalonado, formatoBs } from '@/lib/esquemaPago'
+import { subirArchivo } from '@/lib/subirArchivo'
 
 function bs(n: number) {
   return 'Bs ' + n.toLocaleString('es-BO', { minimumFractionDigits: 0 })
@@ -26,18 +30,34 @@ function AlquileresContenido() {
   const [filtroEstado, setFiltroEstado] = useState<'activo' | 'todos'>('activo')
   const [cobrando, setCobrando] = useState<string | null>(null)
   const [mensajeCobro, setMensajeCobro] = useState<Record<string, string>>({})
+  // alquilerId -> meses (YYYY-MM) con cobro registrado
+  const [mesesCobrados, setMesesCobrados] = useState<Record<string, Set<string>>>({})
+  // Edición del plan de pago de un alquiler ya registrado
+  const [editandoPlan, setEditandoPlan] = useState<string | null>(null)
+  const [planForm, setPlanForm] = useState<CanonForm | null>(null)
+  const [guardandoPlan, setGuardandoPlan] = useState(false)
+  const [subiendoContrato, setSubiendoContrato] = useState<string | null>(null)
 
   async function cargar() {
     setCargando(true)
     const token = await obtenerToken()
     const headers = { Authorization: `Bearer ${token}` }
-    const [resProp, resUni, resAlq, resFam] = await Promise.all([
+    const [resProp, resUni, resAlq, resFam, resMov] = await Promise.all([
       fetch('/api/propiedades', { headers }),
       fetch('/api/unidades', { headers }),
       fetch('/api/alquileres', { headers }),
       fetch('/api/familia', { headers }),
+      fetch('/api/movimientos', { headers }),
     ])
-    const [dataProp, dataUni, dataAlq, dataFam] = await Promise.all([resProp.json(), resUni.json(), resAlq.json(), resFam.json()])
+    const [dataProp, dataUni, dataAlq, dataFam, dataMov] = await Promise.all([
+      resProp.json(), resUni.json(), resAlq.json(), resFam.json(), resMov.json(),
+    ])
+    const cobrados: Record<string, Set<string>> = {}
+    for (const m of dataMov.movimientos || []) {
+      if (!m.alquilerId || !m.fecha) continue
+      ;(cobrados[m.alquilerId] ||= new Set()).add(String(m.fecha).slice(0, 7))
+    }
+    setMesesCobrados(cobrados)
     setPropiedades(dataProp.propiedades || [])
     setUnidades(dataUni.unidades || [])
     setAlquileres(dataAlq.alquileres || [])
@@ -73,9 +93,54 @@ function AlquileresContenido() {
         body: JSON.stringify({ alquilerId, mes: mesActual() }),
       })
       const data = await res.json()
-      setMensajeCobro((m) => ({ ...m, [alquilerId]: data.error || '✓ Registrado como ingreso de este mes.' }))
+      setMensajeCobro((m) => ({ ...m, [alquilerId]: data.error || `✓ Registrado como ingreso: ${data.texto || 'este mes'}.` }))
+      if (!data.error) {
+        setMesesCobrados((prev) => ({ ...prev, [alquilerId]: new Set([...Array.from(prev[alquilerId] || []), mesActual()]) }))
+      }
     } finally {
       setCobrando(null)
+    }
+  }
+
+  function abrirEditorPlan(a: any) {
+    setEditandoPlan(a.id)
+    setPlanForm(canonFormDesdeEsquema(esquemaDeAlquiler(a), a.montoMensual))
+  }
+
+  async function guardarPlan(a: any) {
+    if (!planForm || !canonFormValido(planForm)) return alert('Cada tramo del canon necesita un monto.')
+    setGuardandoPlan(true)
+    try {
+      const token = await obtenerToken()
+      const res = await fetch(`/api/alquileres/${a.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ esquemaPago: esquemaDesdeCanonForm(planForm) }),
+      })
+      const data = await res.json()
+      if (data.error) return alert(data.error)
+      setEditandoPlan(null)
+      cargar()
+    } finally {
+      setGuardandoPlan(false)
+    }
+  }
+
+  async function subirContratoDespues(a: any, archivo: File) {
+    setSubiendoContrato(a.id)
+    try {
+      const url = await subirArchivo(archivo, obtenerToken)
+      const token = await obtenerToken()
+      await fetch(`/api/alquileres/${a.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ contratoUrl: url }),
+      })
+      cargar()
+    } catch (err: any) {
+      alert(err.message || 'No se pudo subir el contrato.')
+    } finally {
+      setSubiendoContrato(null)
     }
   }
 
@@ -147,7 +212,31 @@ function AlquileresContenido() {
                 </div>
               </div>
 
-              <div className="font-display text-base font-bold text-ink mt-2">{bs(a.montoMensual)}<span className="font-body text-[11px] font-normal text-inksoft">/mes · día {a.diaCobro}</span></div>
+              {(() => {
+                const cuota = a.estado === 'activo' ? cuotaDelMes(a, mesActual()) : null
+                const esquema = esquemaDeAlquiler(a)
+                return (
+                  <>
+                    <div className="font-display text-base font-bold text-ink mt-2">
+                      {formatoBs(cuota ? cuota.montoMensual : a.montoMensual)}
+                      <span className="font-body text-[11px] font-normal text-inksoft">
+                        /mes · paga del 1 al {a.diaCobro}
+                        {esEscalonado(esquema) && ` · escalonado: ${esquema!.tramos.map((t) => formatoBs(t.monto)).join(' → ')}`}
+                      </span>
+                    </div>
+                    {a.fechaInicio && (
+                      <ResumenPago
+                        compacto
+                        fechaInicio={a.fechaInicio}
+                        fechaFin={a.fechaFin}
+                        diaCobro={a.diaCobro}
+                        esquema={esquema}
+                        mesesCobrados={mesesCobrados[a.id] || new Set()}
+                      />
+                    )}
+                  </>
+                )
+              })()}
 
               {a.variacionCanon && (
                 <div className={`font-body text-[11px] mt-1 ${a.variacionCanon.esMenor ? 'text-amber-600' : 'text-verde'}`}>
@@ -165,8 +254,26 @@ function AlquileresContenido() {
                     Ver contrato firmado
                   </a>
                 )}
+                {!a.contratoUrl && (
+                  <label className="font-body text-[11px] text-ink underline cursor-pointer">
+                    {subiendoContrato === a.id ? 'Subiendo...' : 'Subir contrato firmado'}
+                    <input
+                      type="file"
+                      accept="image/*,application/pdf"
+                      className="hidden"
+                      disabled={subiendoContrato === a.id}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0]
+                        if (f) subirContratoDespues(a, f)
+                      }}
+                    />
+                  </label>
+                )}
                 {a.estado === 'activo' && (
                   <>
+                    <button onClick={() => (editandoPlan === a.id ? setEditandoPlan(null) : abrirEditorPlan(a))} className="font-body text-[11px] text-ink underline">
+                      {editandoPlan === a.id ? 'Cerrar plan de pago' : 'Editar plan de pago'}
+                    </button>
                     <button onClick={() => cobrarMes(a.id)} disabled={cobrando === a.id} className="font-body text-[11px] text-verde underline disabled:opacity-50">
                       {cobrando === a.id ? 'Registrando...' : '✓ Marcar cobrado este mes'}
                     </button>
@@ -179,6 +286,20 @@ function AlquileresContenido() {
                   </>
                 )}
               </div>
+              {editandoPlan === a.id && planForm && (
+                <div className="mt-3">
+                  <EditorCanon valor={planForm} onCambio={setPlanForm} fechaInicio={a.fechaInicio} fechaFin={a.fechaFin} />
+                  <ResumenPago fechaInicio={a.fechaInicio} fechaFin={a.fechaFin} diaCobro={a.diaCobro} esquema={esquemaDesdeCanonForm(planForm)} />
+                  <button
+                    onClick={() => guardarPlan(a)}
+                    disabled={guardandoPlan}
+                    className="w-full py-2 rounded-lg border-none bg-ink text-white font-body text-xs font-semibold disabled:opacity-60 -mt-2"
+                  >
+                    {guardandoPlan ? 'Guardando...' : 'Guardar plan de pago'}
+                  </button>
+                </div>
+              )}
+
               {mensajeCobro[a.id] && (
                 <div className={`font-body text-[11px] mt-1.5 ${mensajeCobro[a.id].startsWith('✓') ? 'text-verde' : 'text-rojo'}`}>
                   {mensajeCobro[a.id]}

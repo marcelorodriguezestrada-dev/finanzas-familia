@@ -104,7 +104,11 @@ export type Alquiler = {
   inquilinoTelefono?: string
   inquilinoDireccionAnterior?: string
   // Condiciones
-  montoMensual: number
+  montoMensual: number // canon del primer tramo (compatibilidad)
+  // Canon fijo o escalonado + prorrateo del primer/último mes. El
+  // monto de cada mes se calcula con cuotaDelMes() de
+  // src/lib/esquemaPago.ts. Alquileres viejos sin esquema = canon fijo.
+  esquemaPago?: import('@/lib/esquemaPago').EsquemaPago | null
   anticipo?: number | null // meses de adelanto / garantía
   diaCobro: number // 1-31
   fechaInicio: string // YYYY-MM-DD
@@ -112,8 +116,8 @@ export type Alquiler = {
   // Quién de la familia administra ESTE alquiler puntual.
   administradorUid: string
   administradorNombre: string
-  // Contrato firmado escaneado — se exige para poder marcar el
-  // alquiler como activo (ver la validación en /api/alquileres).
+  // Contrato firmado escaneado — opcional al registrar, se puede
+  // subir después.
   contratoUrl?: string | null
   contratoSubidoEn?: string | null
   estado: EstadoAlquiler

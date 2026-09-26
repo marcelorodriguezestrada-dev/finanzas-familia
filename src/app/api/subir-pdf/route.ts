@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
   const chequeo = await requerirUsuarioAprobado(req)
   if ('error' in chequeo) return NextResponse.json({ error: chequeo.error }, { status: chequeo.status })
 
-  const supabaseUrl = process.env.SUPABASE_URL
+  const supabaseUrl = process.env.SUPABASE_URL?.trim().replace(/\/(rest|storage)\/v1\/?.*$/, '').replace(/\/+$/, '')
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!supabaseUrl || !serviceKey) {
     return NextResponse.json(

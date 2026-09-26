@@ -22,6 +22,12 @@ export default function PropiedadesPage() {
   const [error, setError] = useState('')
 
   const [expandida, setExpandida] = useState<string | null>(null)
+  const [editandoPropiedad, setEditandoPropiedad] = useState<string | null>(null)
+  const [nombreEdit, setNombreEdit] = useState('')
+  const [direccionEdit, setDireccionEdit] = useState('')
+  const [notasEdit, setNotasEdit] = useState('')
+  const [guardandoEdicion, setGuardandoEdicion] = useState(false)
+  const [errorEdicion, setErrorEdicion] = useState('')
   const [agregandoUnidadEn, setAgregandoUnidadEn] = useState<string | null>(null)
   const [ingresoInteligenteEn, setIngresoInteligenteEn] = useState<string | null>(null)
   const [subiendoCroquisEn, setSubiendoCroquisEn] = useState<string | null>(null)
@@ -80,6 +86,34 @@ export default function PropiedadesPage() {
     const data = await res.json()
     if (data.error) return alert(data.error)
     cargar()
+  }
+
+  function iniciarEdicionPropiedad(p: any) {
+    setEditandoPropiedad(p.id)
+    setNombreEdit(p.nombre || '')
+    setDireccionEdit(p.direccion || '')
+    setNotasEdit(p.notas || '')
+    setErrorEdicion('')
+  }
+
+  async function guardarEdicionPropiedad(id: string) {
+    setErrorEdicion('')
+    if (!nombreEdit.trim()) return setErrorEdicion('El nombre de la casa no puede quedar vacío.')
+    setGuardandoEdicion(true)
+    try {
+      const token = await obtenerToken()
+      const res = await fetch(`/api/propiedades/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ nombre: nombreEdit, direccion: direccionEdit, notas: notasEdit }),
+      })
+      const data = await res.json()
+      if (data.error) return setErrorEdicion(data.error)
+      setEditandoPropiedad(null)
+      cargar()
+    } finally {
+      setGuardandoEdicion(false)
+    }
   }
 
   async function subirCroquis(propiedadId: string, archivo: File) {
@@ -150,25 +184,66 @@ export default function PropiedadesPage() {
 
         return (
           <div key={p.id} className="bg-panel border border-line rounded-xl p-5 mb-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="cursor-pointer flex-1" onClick={() => setExpandida(abierta ? null : p.id)}>
-                <div className="font-body text-base font-semibold text-ink">{p.nombre}</div>
-                {p.direccion && <div className="font-body text-xs text-inksoft">{p.direccion}</div>}
-                <div className="font-body text-[11px] text-inksoft mt-1">
-                  {unidades.length} espacio{unidades.length !== 1 ? 's' : ''} · {alquiladas} alquilado{alquiladas !== 1 ? 's' : ''}
+            {editandoPropiedad === p.id ? (
+              <div>
+                <input
+                  value={nombreEdit}
+                  onChange={(e) => setNombreEdit(e.target.value)}
+                  placeholder="Nombre de la casa"
+                  className="w-full px-3.5 py-2.5 rounded-lg border border-line font-body text-sm mb-2"
+                />
+                <input
+                  value={direccionEdit}
+                  onChange={(e) => setDireccionEdit(e.target.value)}
+                  placeholder="Dirección (opcional)"
+                  className="w-full px-3.5 py-2.5 rounded-lg border border-line font-body text-sm mb-2"
+                />
+                <textarea
+                  value={notasEdit}
+                  onChange={(e) => setNotasEdit(e.target.value)}
+                  placeholder="Notas (opcional)"
+                  rows={2}
+                  className="w-full px-3.5 py-2.5 rounded-lg border border-line font-body text-sm mb-2"
+                />
+                {errorEdicion && <div className="font-body text-xs text-rojo mb-2">{errorEdicion}</div>}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => guardarEdicionPropiedad(p.id)}
+                    disabled={guardandoEdicion}
+                    className="flex-1 py-2 rounded-lg border-none bg-ink text-white font-body text-xs font-semibold disabled:opacity-60"
+                  >
+                    {guardandoEdicion ? 'Guardando...' : 'Guardar cambios'}
+                  </button>
+                  <button onClick={() => setEditandoPropiedad(null)} className="px-4 py-2 rounded-lg border border-line font-body text-xs text-inksoft">
+                    Cancelar
+                  </button>
                 </div>
               </div>
-              <div className="flex gap-2 shrink-0">
-                <button onClick={() => setExpandida(abierta ? null : p.id)} className="font-body text-[11px] text-ink underline">
-                  {abierta ? 'Cerrar' : 'Ver espacios'}
-                </button>
-                <button onClick={() => borrarPropiedad(p.id)} className="font-body text-[11px] text-rojo underline">
-                  Borrar
-                </button>
+            ) : (
+              <div className="flex items-start justify-between gap-3">
+                <div className="cursor-pointer flex-1" onClick={() => setExpandida(abierta ? null : p.id)}>
+                  <div className="font-body text-base font-semibold text-ink">{p.nombre}</div>
+                  {p.direccion && <div className="font-body text-xs text-inksoft">{p.direccion}</div>}
+                  {p.notas && <div className="font-body text-[11px] text-inksoft mt-0.5">{p.notas}</div>}
+                  <div className="font-body text-[11px] text-inksoft mt-1">
+                    {unidades.length} espacio{unidades.length !== 1 ? 's' : ''} · {alquiladas} alquilado{alquiladas !== 1 ? 's' : ''}
+                  </div>
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  <button onClick={() => setExpandida(abierta ? null : p.id)} className="font-body text-[11px] text-ink underline">
+                    {abierta ? 'Cerrar' : 'Ver espacios'}
+                  </button>
+                  <button onClick={() => iniciarEdicionPropiedad(p)} className="font-body text-[11px] text-ink underline">
+                    Editar
+                  </button>
+                  <button onClick={() => borrarPropiedad(p.id)} className="font-body text-[11px] text-rojo underline">
+                    Borrar
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
 
-            {abierta && (
+            {abierta && editandoPropiedad !== p.id && (
               <div className="mt-4 pt-4 border-t border-line">
                 <div className="mb-4">
                   <div className="font-body text-[11px] font-semibold text-ink mb-1.5">Croquis / mapa de referencia</div>

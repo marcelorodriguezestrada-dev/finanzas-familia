@@ -10,7 +10,7 @@ export const CATEGORIAS_GASTO = [
   'Otro',
 ]
 
-export const CATEGORIAS_INGRESO = ['Alquiler', 'Sueldo', 'Venta', 'Otro']
+export const CATEGORIAS_INGRESO = ['Alquiler', 'Cobro de deuda (alquiler)', 'Sueldo', 'Venta', 'Otro']
 
 export const TIPOS_PATRIMONIO = [
   { id: 'inmueble', label: 'Inmueble', esDeuda: false },

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@/lib/auth'
 import { PaginaProtegida } from '@/components/PaginaProtegida'
 import { cuotaDelMes, formatoBs } from '@/lib/esquemaPago'
+import { ordenarCuotas } from '@/lib/deudas'
 
 function diasEntre(hoyISO: string, fechaISO: string) {
   const hoy = new Date(hoyISO)
@@ -18,6 +19,7 @@ export default function CalendarioPage() {
   const [propiedades, setPropiedades] = useState<any[]>([])
   const [movimientosMes, setMovimientosMes] = useState<any[]>([])
   const [reparacionesPendientes, setReparacionesPendientes] = useState<any[]>([])
+  const [deudas, setDeudas] = useState<any[]>([])
   const [cargando, setCargando] = useState(true)
 
   const hoy = new Date().toISOString().slice(0, 10)
@@ -28,16 +30,18 @@ export default function CalendarioPage() {
       setCargando(true)
       const token = await obtenerToken()
       const headers = { Authorization: `Bearer ${token}` }
-      const [resAlq, resUni, resProp, resMov, resRep] = await Promise.all([
+      const [resAlq, resUni, resProp, resMov, resRep, resDeu] = await Promise.all([
         fetch('/api/alquileres?estado=activo', { headers }),
         fetch('/api/unidades', { headers }),
         fetch('/api/propiedades', { headers }),
         fetch(`/api/movimientos?mes=${mesActual}`, { headers }),
         fetch('/api/reparaciones?resuelta=false', { headers }),
+        fetch('/api/deudas', { headers }),
       ])
-      const [dataAlq, dataUni, dataProp, dataMov, dataRep] = await Promise.all([
-        resAlq.json(), resUni.json(), resProp.json(), resMov.json(), resRep.json(),
+      const [dataAlq, dataUni, dataProp, dataMov, dataRep, dataDeu] = await Promise.all([
+        resAlq.json(), resUni.json(), resProp.json(), resMov.json(), resRep.json(), resDeu.json(),
       ])
+      setDeudas(dataDeu.deudas || [])
       setAlquileres(dataAlq.alquileres || [])
       setUnidades(dataUni.unidades || [])
       setPropiedades(dataProp.propiedades || [])
@@ -82,6 +86,22 @@ export default function CalendarioPage() {
       .sort((a, b) => a.cuota!.vence.localeCompare(b.cuota!.vence))
   }, [conCuota, hoy])
 
+  // Cuotas de planes de pago de deudas: vencidas sin pagar y las que
+  // vencen en los próximos 7 días.
+  const cuotasDeuda = useMemo(() => {
+    const filas: { deuda: any; numero: number; total: number; monto: number; vence: string; dias: number }[] = []
+    for (const d of deudas) {
+      if (d.estado !== 'vigente') continue
+      const cs = ordenarCuotas(d.cuotas || [])
+      for (const c of cs) {
+        if (c.pagada) continue
+        const dias = diasEntre(hoy, c.vence)
+        if (dias <= 7) filas.push({ deuda: d, numero: c.numero, total: cs.length, monto: c.monto, vence: c.vence, dias })
+      }
+    }
+    return filas.sort((a, b) => a.vence.localeCompare(b.vence))
+  }, [deudas, hoy])
+
   // Contratos que vencen en los próximos 60 días, o ya vencidos.
   const vencimientos = useMemo(() => {
     return alquileres
@@ -120,6 +140,20 @@ export default function CalendarioPage() {
               <div className="font-body text-xs font-semibold text-ink">{a.inquilinoNombre}</div>
               <div className="font-body text-[11px] text-inksoft">
                 {nombrePropiedad(a.propiedadId)} — {nombreUnidad(a.unidadId)} · {formatoBs(a.cuota!.monto)} · vence el {a.cuota!.vence.slice(8, 10)}/{a.cuota!.vence.slice(5, 7)}
+              </div>
+            </div>
+          ))}
+
+          <div className="font-body text-sm font-semibold text-ink mb-3 mt-8">
+            Cuotas de deudas (vencidas y próximos 7 días) <a href="/deudas" className="font-normal text-[11px] text-inksoft underline">ver deudas</a>
+          </div>
+          {cuotasDeuda.length === 0 && <div className="font-body text-xs text-inksoft mb-6">No hay cuotas de deudas vencidas ni por vencer esta semana.</div>}
+          {cuotasDeuda.map((c) => (
+            <div key={`${c.deuda.id}-${c.numero}`} className={`border rounded-lg p-3 mb-2 ${c.dias < 0 ? 'bg-rojosoft border-rojo' : 'border-line'}`}>
+              <div className="font-body text-xs font-semibold text-ink">{c.deuda.deudorNombre} · cuota {c.numero}/{c.total}</div>
+              <div className="font-body text-[11px] text-inksoft">
+                {[nombrePropiedad(c.deuda.propiedadId), nombreUnidad(c.deuda.unidadId)].filter((x) => x && x !== '—').join(' — ') || 'Sin departamento'} · {formatoBs(c.monto)} ·{' '}
+                {c.dias < 0 ? <span className="text-rojo font-semibold">vencida hace {Math.abs(c.dias)} días</span> : c.dias === 0 ? 'vence hoy' : `vence en ${c.dias} días`}
               </div>
             </div>
           ))}

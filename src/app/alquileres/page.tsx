@@ -10,6 +10,7 @@ import { ResumenPago } from '@/components/ResumenPago'
 import { EditorCanon, CanonForm, canonFormDesdeEsquema, esquemaDesdeCanonForm, canonFormValido } from '@/components/EditorCanon'
 import { cuotaDelMes, esquemaDeAlquiler, esEscalonado, formatoBs } from '@/lib/esquemaPago'
 import { subirArchivo } from '@/lib/subirArchivo'
+import { resumirDeuda } from '@/lib/deudas'
 
 function bs(n: number) {
   return 'Bs ' + n.toLocaleString('es-BO', { minimumFractionDigits: 0 })
@@ -37,21 +38,24 @@ function AlquileresContenido() {
   const [planForm, setPlanForm] = useState<CanonForm | null>(null)
   const [guardandoPlan, setGuardandoPlan] = useState(false)
   const [subiendoContrato, setSubiendoContrato] = useState<string | null>(null)
+  const [deudas, setDeudas] = useState<any[]>([])
 
   async function cargar() {
     setCargando(true)
     const token = await obtenerToken()
     const headers = { Authorization: `Bearer ${token}` }
-    const [resProp, resUni, resAlq, resFam, resMov] = await Promise.all([
+    const [resProp, resUni, resAlq, resFam, resMov, resDeu] = await Promise.all([
       fetch('/api/propiedades', { headers }),
       fetch('/api/unidades', { headers }),
       fetch('/api/alquileres', { headers }),
       fetch('/api/familia', { headers }),
       fetch('/api/movimientos', { headers }),
+      fetch('/api/deudas', { headers }),
     ])
-    const [dataProp, dataUni, dataAlq, dataFam, dataMov] = await Promise.all([
-      resProp.json(), resUni.json(), resAlq.json(), resFam.json(), resMov.json(),
+    const [dataProp, dataUni, dataAlq, dataFam, dataMov, dataDeu] = await Promise.all([
+      resProp.json(), resUni.json(), resAlq.json(), resFam.json(), resMov.json(), resDeu.json(),
     ])
+    setDeudas(dataDeu.deudas || [])
     const cobrados: Record<string, Set<string>> = {}
     for (const m of dataMov.movimientos || []) {
       if (!m.alquilerId || !m.fecha) continue
@@ -254,6 +258,9 @@ function AlquileresContenido() {
                     Ver contrato firmado
                   </a>
                 )}
+                <a href={`/deudas?alquilerId=${a.id}`} className="font-body text-[11px] text-rojo underline">
+                  Registrar deuda / plan de pago
+                </a>
                 {!a.contratoUrl && (
                   <label className="font-body text-[11px] text-ink underline cursor-pointer">
                     {subiendoContrato === a.id ? 'Subiendo...' : 'Subir contrato firmado'}
@@ -286,6 +293,18 @@ function AlquileresContenido() {
                   </>
                 )}
               </div>
+              {deudas
+                .filter((d) => d.alquilerId === a.id && d.estado !== 'anulada')
+                .map((d) => {
+                  const r = resumirDeuda(d)
+                  return (
+                    <a key={d.id} href="/deudas" className={`block font-body text-[11px] mt-2 rounded-md px-2 py-1.5 ${d.estado === 'cancelada' ? 'bg-verdesoft text-verde' : 'bg-rojosoft text-rojo'}`}>
+                      💸 Deuda en plan de pago ({d.concepto}): {d.estado === 'cancelada' ? 'cancelada' : `saldo ${formatoBs(r.saldo)} · ${r.cuotasPagadas}/${r.cantidadCuotas} cuotas`}
+                      {r.vencidas.length > 0 && d.estado === 'vigente' ? ` · ${r.vencidas.length} vencidas` : ''}
+                    </a>
+                  )
+                })}
+
               {editandoPlan === a.id && planForm && (
                 <div className="mt-3">
                   <EditorCanon valor={planForm} onCambio={setPlanForm} fechaInicio={a.fechaInicio} fechaFin={a.fechaFin} />

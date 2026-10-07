@@ -6,3 +6,28 @@ html, body {
   background: #f4f2ea;
   color: #20261f;
 }
+
+/* Impresión / "Guardar como PDF" del informe y la liquidación: hojas
+   A4, colores tal cual (fondos de bandas y semáforo), y cada .hoja en
+   su propia página. */
+@media print {
+  @page {
+    size: A4;
+    margin: 12mm;
+  }
+  html,
+  body {
+    background: #ffffff !important;
+  }
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .hoja {
+    break-after: page;
+    min-height: 262mm;
+  }
+  .hoja:last-child {
+    break-after: auto;
+  }
+}

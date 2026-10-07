@@ -4,9 +4,11 @@ import { useEffect, useState } from 'react'
 import { useAuth } from '@/lib/auth'
 import { PaginaProtegida } from '@/components/PaginaProtegida'
 import { TIPOS_PATRIMONIO } from '@/data/categorias'
+import { formatoBs } from '@/lib/esquemaPago'
 
+// Monto con el símbolo de la moneda del espacio activo.
 function bs(n: number) {
-  return 'Bs ' + n.toLocaleString('es-BO', { minimumFractionDigits: 0 })
+  return formatoBs(n)
 }
 
 export default function PatrimonioPage() {

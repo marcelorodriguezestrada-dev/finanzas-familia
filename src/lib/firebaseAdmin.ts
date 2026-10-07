@@ -59,6 +59,8 @@ export type Perfil = {
   nombre: string
   rol: 'miembro'
   aprobado: true
+  // Moneda del espacio personal ("Mis finanzas"); por defecto ARS.
+  monedaPersonal?: string
 }
 
 // Trae el perfil de un uid. null si todavía no se registró en /api/perfil.

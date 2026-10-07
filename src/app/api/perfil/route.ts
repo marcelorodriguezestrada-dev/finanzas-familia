@@ -59,6 +59,23 @@ export async function PATCH(req: NextRequest) {
     const body = await req.json()
     const cambios: Record<string, unknown> = {}
     if (typeof body.ci === 'string') cambios.ci = body.ci.trim().slice(0, 40)
+    if (typeof body.monedaPersonal === 'string') {
+      if (!['ARS', 'BOB', 'USD', 'USDT'].includes(body.monedaPersonal)) {
+        return NextResponse.json({ error: 'Moneda no soportada.' }, { status: 400 })
+      }
+      // Nunca mezclar monedas: si ya hay movimientos personales en otra
+      // moneda, no se cambia (habría que convertirlos primero).
+      const espacio = `personal:${usuario.uid}`
+      const previos = await getDb().collection('movimientos').where('espacio', '==', espacio).get()
+      const otra = previos.docs.find((d) => (d.data().moneda || 'ARS') !== body.monedaPersonal)
+      if (otra) {
+        return NextResponse.json(
+          { error: `Ya tenés movimientos personales en ${otra.data().moneda || 'ARS'}. Para no mezclar monedas, la moneda de Mis finanzas no se puede cambiar.` },
+          { status: 409 }
+        )
+      }
+      cambios.monedaPersonal = body.monedaPersonal
+    }
     if (body.firmaDataUrl === null) {
       cambios.firmaDataUrl = null
     } else if (typeof body.firmaDataUrl === 'string') {

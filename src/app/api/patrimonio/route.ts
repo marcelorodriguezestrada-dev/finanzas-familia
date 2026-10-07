@@ -1,15 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDb, requerirUsuarioAprobado, requerirAdmin } from '@/lib/firebaseAdmin'
+import { espacioDe, enEspacio } from '@/lib/espacioServidor'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
   const chequeo = await requerirUsuarioAprobado(req)
   if ('error' in chequeo) return NextResponse.json({ error: chequeo.error }, { status: chequeo.status })
+  const esp = espacioDe(req, chequeo)
 
   try {
     const snap = await getDb().collection('patrimonio').orderBy('creadoEn', 'desc').get()
-    const items = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+    const items = enEspacio(snap.docs.map((d) => ({ id: d.id, ...d.data() })) as any[], esp)
     return NextResponse.json({ items })
   } catch (err: any) {
     console.error('GET /api/patrimonio', err)
@@ -20,6 +22,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const chequeo = await requerirAdmin(req)
   if ('error' in chequeo) return NextResponse.json({ error: chequeo.error }, { status: chequeo.status })
+  const esp = espacioDe(req, chequeo)
 
   try {
     const body = await req.json()
@@ -28,6 +31,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Faltan datos (nombre, tipo y valor).' }, { status: 400 })
     }
     const ref = await getDb().collection('patrimonio').add({
+      espacio: esp.id,
       nombre,
       tipo,
       valor: Number(valor),

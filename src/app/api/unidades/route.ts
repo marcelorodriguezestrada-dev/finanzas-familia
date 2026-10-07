@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDb, requerirUsuarioAprobado } from '@/lib/firebaseAdmin'
+import { espacioDe, enEspacio, esDelEspacio } from '@/lib/espacioServidor'
 
 export const dynamic = 'force-dynamic'
 
@@ -9,6 +10,7 @@ export const dynamic = 'force-dynamic'
 export async function GET(req: NextRequest) {
   const chequeo = await requerirUsuarioAprobado(req)
   if ('error' in chequeo) return NextResponse.json({ error: chequeo.error }, { status: chequeo.status })
+  const esp = espacioDe(req, chequeo)
 
   try {
     const propiedadId = req.nextUrl.searchParams.get('propiedadId')
@@ -16,7 +18,7 @@ export async function GET(req: NextRequest) {
     let query = db.collection('unidades') as FirebaseFirestore.Query
     if (propiedadId) query = query.where('propiedadId', '==', propiedadId)
     const snap = await query.get()
-    const unidades = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+    const unidades = enEspacio(snap.docs.map((d) => ({ id: d.id, ...d.data() })) as any[], esp)
     // Ordenamos acá en memoria y no con orderBy para no obligar a crear
     // un índice compuesto en Firestore (propiedadId + nombre) — son
     // pocas unidades por casa, no justifica el índice.
@@ -32,6 +34,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const chequeo = await requerirUsuarioAprobado(req)
   if ('error' in chequeo) return NextResponse.json({ error: chequeo.error }, { status: chequeo.status })
+  const esp = espacioDe(req, chequeo)
 
   try {
     const body = await req.json()
@@ -46,11 +49,15 @@ export async function POST(req: NextRequest) {
 
     const db = getDb()
     const propiedad = await db.collection('propiedades').doc(propiedadId).get()
+    if (propiedad.exists && !esDelEspacio(propiedad.data(), esp)) {
+      return NextResponse.json({ error: 'Esa propiedad no existe.' }, { status: 404 })
+    }
     if (!propiedad.exists) {
       return NextResponse.json({ error: 'Esa propiedad no existe.' }, { status: 404 })
     }
 
     const ref = await db.collection('unidades').add({
+      espacio: esp.id,
       propiedadId,
       nombre: String(nombre).trim(),
       tipo: tipo || 'departamento',

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDb, requerirUsuarioAprobado } from '@/lib/firebaseAdmin'
+import { espacioDe, enEspacio, docDelEspacio } from '@/lib/espacioServidor'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,6 +11,7 @@ export const dynamic = 'force-dynamic'
 export async function GET(req: NextRequest) {
   const chequeo = await requerirUsuarioAprobado(req)
   if ('error' in chequeo) return NextResponse.json({ error: chequeo.error }, { status: chequeo.status })
+  const esp = espacioDe(req, chequeo)
 
   try {
     const mes = req.nextUrl.searchParams.get('mes')
@@ -19,7 +21,7 @@ export async function GET(req: NextRequest) {
     const alquilerId = req.nextUrl.searchParams.get('alquilerId')
     if (alquilerId) {
       const snap = await getDb().collection('movimientos').where('alquilerId', '==', alquilerId).get()
-      const movimientos = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as any[]
+      const movimientos = enEspacio(snap.docs.map((d) => ({ id: d.id, ...d.data() })) as any[], esp)
       movimientos.sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''))
       return NextResponse.json({ movimientos })
     }
@@ -28,7 +30,7 @@ export async function GET(req: NextRequest) {
       query = query.where('fecha', '>=', `${mes}-01`).where('fecha', '<=', `${mes}-31`)
     }
     const snap = await query.get()
-    const movimientos = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+    const movimientos = enEspacio(snap.docs.map((d) => ({ id: d.id, ...d.data() })) as any[], esp)
     return NextResponse.json({ movimientos })
   } catch (err: any) {
     console.error('GET /api/movimientos', err)
@@ -40,6 +42,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const chequeo = await requerirUsuarioAprobado(req)
   if ('error' in chequeo) return NextResponse.json({ error: chequeo.error }, { status: chequeo.status })
+  const esp = espacioDe(req, chequeo)
 
   try {
     const body = await req.json()
@@ -51,7 +54,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Faltan datos (monto, categoría y fecha).' }, { status: 400 })
     }
 
+    // La propiedad, si viene, tiene que ser del mismo espacio.
+    if (propiedadId && !(await docDelEspacio('propiedades', propiedadId, esp))) {
+      return NextResponse.json({ error: 'Esa propiedad no es de este espacio.' }, { status: 400 })
+    }
+
     const ref = await getDb().collection('movimientos').add({
+      espacio: esp.id,
+      moneda: esp.moneda,
       tipo,
       monto: Number(monto),
       categoria,

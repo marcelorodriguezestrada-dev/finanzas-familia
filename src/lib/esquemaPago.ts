@@ -3,6 +3,8 @@
 // final"), más el cobro proporcional de los días sueltos del primer y
 // del último mes.
 //
+import { monedaActual, simboloDe } from './monedas'
+
 // Es código puro (sin Firebase ni React) para poder usarlo igual en el
 // formulario (resumen en vivo), en el generador del contrato PDF, en
 // /api/cobrar-alquiler (cuánto cobrar cada mes) y en el calendario de
@@ -62,7 +64,9 @@ export function formatoBs(n: number, conPrefijo = true) {
   const centavos = Math.round((Math.abs(r) - entero) * 100)
   const miles = entero.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.')
   const txt = `${r < 0 ? '-' : ''}${miles}${centavos ? ',' + String(centavos).padStart(2, '0') : ''}`
-  return conPrefijo ? `Bs ${txt}` : txt
+  // El símbolo sigue al espacio activo (Bs en la familia, $ en un
+  // espacio personal en pesos); en el servidor es siempre Bs.
+  return conPrefijo ? `${simboloDe(monedaActual())} ${txt}` : txt
 }
 
 function diasDelMes(anio: number, mes1: number) {

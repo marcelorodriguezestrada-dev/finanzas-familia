@@ -5,10 +5,11 @@ import Link from 'next/link'
 import { useAuth } from '@/lib/auth'
 import { PaginaProtegida } from '@/components/PaginaProtegida'
 import { mesActual } from '@/data/categorias'
+import { formatoBs } from '@/lib/esquemaPago'
 
+// Monto con el símbolo de la moneda del espacio activo.
 function bs(n: number) {
-  const signo = n < 0 ? '-' : ''
-  return `${signo}Bs ${Math.abs(n).toLocaleString('es-BO', { minimumFractionDigits: 0 })}`
+  return formatoBs(n)
 }
 
 export default function ResumenPage() {

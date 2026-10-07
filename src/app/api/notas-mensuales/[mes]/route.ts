@@ -1,14 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDb, requerirUsuarioAprobado } from '@/lib/firebaseAdmin'
+import { espacioDe } from '@/lib/espacioServidor'
+
+// La nota de la familia sigue con id = mes (como siempre); la personal
+// se guarda aparte con el uid adelante.
+const idNota = (mes: string, espId: string) => (espId === 'familia' ? mes : `${espId}__${mes}`)
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest, { params }: { params: { mes: string } }) {
   const chequeo = await requerirUsuarioAprobado(req)
   if ('error' in chequeo) return NextResponse.json({ error: chequeo.error }, { status: chequeo.status })
+  const esp = espacioDe(req, chequeo)
 
   try {
-    const doc = await getDb().collection('notasMensuales').doc(params.mes).get()
+    const doc = await getDb().collection('notasMensuales').doc(idNota(params.mes, esp.id)).get()
     return NextResponse.json({ nota: doc.exists ? doc.data() : null })
   } catch (err: any) {
     console.error('GET /api/notas-mensuales', err)
@@ -22,10 +28,11 @@ export async function GET(req: NextRequest, { params }: { params: { mes: string 
 export async function POST(req: NextRequest, { params }: { params: { mes: string } }) {
   const chequeo = await requerirUsuarioAprobado(req)
   if ('error' in chequeo) return NextResponse.json({ error: chequeo.error }, { status: chequeo.status })
+  const esp = espacioDe(req, chequeo)
 
   try {
     const { texto } = await req.json()
-    await getDb().collection('notasMensuales').doc(params.mes).set(
+    await getDb().collection('notasMensuales').doc(idNota(params.mes, esp.id)).set(
       {
         texto: texto || '',
         actualizadoPor: chequeo.perfil.nombre,

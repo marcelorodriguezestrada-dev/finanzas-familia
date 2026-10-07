@@ -5,6 +5,7 @@ export const CATEGORIAS_GASTO = [
   'Educación',
   'Transporte',
   'Mantenimiento de propiedades',
+  'Expensas',
   'Impuestos',
   'Entretenimiento',
   'Otro',

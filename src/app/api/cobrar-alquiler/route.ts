@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDb, requerirUsuarioAprobado } from '@/lib/firebaseAdmin'
 import { cuotaDelMes, formatoBs } from '@/lib/esquemaPago'
+import { espacioDe, esDelEspacio } from '@/lib/espacioServidor'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,6 +13,7 @@ export const dynamic = 'force-dynamic'
 export async function POST(req: NextRequest) {
   const chequeo = await requerirUsuarioAprobado(req)
   if ('error' in chequeo) return NextResponse.json({ error: chequeo.error }, { status: chequeo.status })
+  const esp = espacioDe(req, chequeo)
 
   try {
     const { alquilerId, mes } = await req.json()
@@ -21,6 +23,7 @@ export async function POST(req: NextRequest) {
     const alqDoc = await db.collection('alquileres').doc(alquilerId).get()
     if (!alqDoc.exists) return NextResponse.json({ error: 'Ese alquiler no existe.' }, { status: 404 })
     const alquiler = alqDoc.data()!
+    if (!esDelEspacio(alquiler, esp)) return NextResponse.json({ error: 'Ese alquiler no existe.' }, { status: 404 })
 
     const yaCobrado = await db
       .collection('movimientos')
@@ -46,6 +49,8 @@ export async function POST(req: NextRequest) {
 
     const hoy = new Date().toISOString().slice(0, 10)
     const ref = await db.collection('movimientos').add({
+      espacio: esp.id,
+      moneda: esp.moneda,
       tipo: 'ingreso',
       monto: cuota.monto,
       categoria: 'Alquiler',

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDb, requerirUsuarioAprobado } from '@/lib/firebaseAdmin'
 import { sanearCuotas } from '@/lib/deudas'
+import { espacioDe, docDelEspacio } from '@/lib/espacioServidor'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,6 +16,8 @@ const CAMPOS_TEXTO = [
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const chequeo = await requerirUsuarioAprobado(req)
   if ('error' in chequeo) return NextResponse.json({ error: chequeo.error }, { status: chequeo.status })
+  const esp = espacioDe(req, chequeo)
+  if (!(await docDelEspacio('deudas', params.id, esp))) return NextResponse.json({ error: 'No se encontró (o es de otro espacio).' }, { status: 404 })
   try {
     const b = await req.json()
     const ref = getDb().collection('deudas').doc(params.id)
@@ -50,6 +53,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   const chequeo = await requerirUsuarioAprobado(req)
   if ('error' in chequeo) return NextResponse.json({ error: chequeo.error }, { status: chequeo.status })
+  const esp = espacioDe(req, chequeo)
+  if (!(await docDelEspacio('deudas', params.id, esp))) return NextResponse.json({ error: 'No se encontró (o es de otro espacio).' }, { status: 404 })
   const db = getDb()
   const ref = db.collection('deudas').doc(params.id)
   const doc = await ref.get()

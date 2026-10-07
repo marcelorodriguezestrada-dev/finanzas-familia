@@ -3,14 +3,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@/lib/auth'
 import { PaginaProtegida } from '@/components/PaginaProtegida'
+import { formatoBs } from '@/lib/esquemaPago'
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   BarChart, Bar, Legend,
 } from 'recharts'
 
+// Monto con el símbolo de la moneda del espacio activo.
 function bs(n: number) {
-  const signo = n < 0 ? '-' : ''
-  return `${signo}Bs ${Math.abs(Math.round(n)).toLocaleString('es-BO')}`
+  return formatoBs(n)
 }
 
 export default function DashboardPage() {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getDb, requerirUsuarioAprobado } from '@/lib/firebaseAdmin'
 import { detectarVariacion } from '@/data/inmuebles'
 import { normalizarEsquema } from '@/lib/esquemaPago'
+import { espacioDe, enEspacio, docDelEspacio } from '@/lib/espacioServidor'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,6 +13,7 @@ export const dynamic = 'force-dynamic'
 export async function GET(req: NextRequest) {
   const chequeo = await requerirUsuarioAprobado(req)
   if ('error' in chequeo) return NextResponse.json({ error: chequeo.error }, { status: chequeo.status })
+  const esp = espacioDe(req, chequeo)
 
   try {
     const { searchParams } = req.nextUrl
@@ -26,7 +28,7 @@ export async function GET(req: NextRequest) {
     if (estado) query = query.where('estado', '==', estado)
 
     const snap = await query.get()
-    const alquileres = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as any[]
+    const alquileres = enEspacio(snap.docs.map((d) => ({ id: d.id, ...d.data() })) as any[], esp)
     // Más nuevo primero. Igual que en unidades, ordenamos en memoria
     // para no depender de índices compuestos de Firestore.
     alquileres.sort((a, b) => (b.fechaInicio || '').localeCompare(a.fechaInicio || ''))
@@ -41,6 +43,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const chequeo = await requerirUsuarioAprobado(req)
   if ('error' in chequeo) return NextResponse.json({ error: chequeo.error }, { status: chequeo.status })
+  const esp = espacioDe(req, chequeo)
 
   try {
     const body = await req.json()
@@ -90,7 +93,12 @@ export async function POST(req: NextRequest) {
     const monto = esquema ? esquema.tramos[0].monto : Number(montoMensual)
     const variacion = detectarVariacion(monto, Number(unidad.canonEstandar || 0))
 
+    if (unidadId && !(await docDelEspacio('unidades', unidadId, esp))) {
+      return NextResponse.json({ error: 'Esa unidad no es de este espacio.' }, { status: 400 })
+    }
+
     const ref = await db.collection('alquileres').add({
+      espacio: esp.id,
       propiedadId: unidad.propiedadId,
       unidadId,
       inquilinoNombre: String(inquilinoNombre).trim(),

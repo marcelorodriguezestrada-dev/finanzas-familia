@@ -14,6 +14,7 @@ type PerfilPropio = {
   nombre: string
   rol: 'admin' | 'miembro' | 'pendiente'
   aprobado: boolean
+  monedaPersonal?: string
 } | null
 
 type AuthContexto = {

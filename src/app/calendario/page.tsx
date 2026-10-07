@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/auth'
 import { PaginaProtegida } from '@/components/PaginaProtegida'
 import { cuotaDelMes, formatoBs } from '@/lib/esquemaPago'
 import { ordenarCuotas } from '@/lib/deudas'
+import { vencimientoVigente } from '@/lib/pendientes'
 
 function diasEntre(hoyISO: string, fechaISO: string) {
   const hoy = new Date(hoyISO)
@@ -20,6 +21,7 @@ export default function CalendarioPage() {
   const [movimientosMes, setMovimientosMes] = useState<any[]>([])
   const [reparacionesPendientes, setReparacionesPendientes] = useState<any[]>([])
   const [deudas, setDeudas] = useState<any[]>([])
+  const [pendientes, setPendientes] = useState<any[]>([])
   const [cargando, setCargando] = useState(true)
 
   const hoy = new Date().toISOString().slice(0, 10)
@@ -30,18 +32,20 @@ export default function CalendarioPage() {
       setCargando(true)
       const token = await obtenerToken()
       const headers = { Authorization: `Bearer ${token}` }
-      const [resAlq, resUni, resProp, resMov, resRep, resDeu] = await Promise.all([
+      const [resAlq, resUni, resProp, resMov, resRep, resDeu, resPen] = await Promise.all([
         fetch('/api/alquileres?estado=activo', { headers }),
         fetch('/api/unidades', { headers }),
         fetch('/api/propiedades', { headers }),
         fetch(`/api/movimientos?mes=${mesActual}`, { headers }),
         fetch('/api/reparaciones?resuelta=false', { headers }),
         fetch('/api/deudas', { headers }),
+        fetch('/api/pendientes', { headers }),
       ])
-      const [dataAlq, dataUni, dataProp, dataMov, dataRep, dataDeu] = await Promise.all([
-        resAlq.json(), resUni.json(), resProp.json(), resMov.json(), resRep.json(), resDeu.json(),
+      const [dataAlq, dataUni, dataProp, dataMov, dataRep, dataDeu, dataPen] = await Promise.all([
+        resAlq.json(), resUni.json(), resProp.json(), resMov.json(), resRep.json(), resDeu.json(), resPen.json(),
       ])
       setDeudas(dataDeu.deudas || [])
+      setPendientes(dataPen.pendientes || [])
       setAlquileres(dataAlq.alquileres || [])
       setUnidades(dataUni.unidades || [])
       setPropiedades(dataProp.propiedades || [])
@@ -102,6 +106,16 @@ export default function CalendarioPage() {
     return filas.sort((a, b) => a.vence.localeCompare(b.vence))
   }, [deudas, hoy])
 
+  // Gastos por pagar (expensas, servicios...): lo vencido y lo que vence
+  // en los próximos 7 días, con el monto que corresponde a hoy.
+  const gastosPorPagar = useMemo(() => {
+    return pendientes
+      .filter((p) => p.estado === 'pendiente')
+      .map((p) => ({ p, v: vencimientoVigente(p, hoy)! }))
+      .filter((x) => x.v && (x.v.vencidoTodo || x.v.diasParaVencer <= 7))
+      .sort((a, b) => a.v.vencimiento.fecha.localeCompare(b.v.vencimiento.fecha))
+  }, [pendientes, hoy])
+
   // Contratos que vencen en los próximos 60 días, o ya vencidos.
   const vencimientos = useMemo(() => {
     return alquileres
@@ -140,6 +154,27 @@ export default function CalendarioPage() {
               <div className="font-body text-xs font-semibold text-ink">{a.inquilinoNombre}</div>
               <div className="font-body text-[11px] text-inksoft">
                 {nombrePropiedad(a.propiedadId)} — {nombreUnidad(a.unidadId)} · {formatoBs(a.cuota!.monto)} · vence el {a.cuota!.vence.slice(8, 10)}/{a.cuota!.vence.slice(5, 7)}
+              </div>
+            </div>
+          ))}
+
+          <div className="font-body text-sm font-semibold text-ink mb-3 mt-8">
+            Gastos por pagar (vencidos y próximos 7 días) <a href="/pendientes" className="font-normal text-[11px] text-inksoft underline">ver todos</a>
+          </div>
+          {gastosPorPagar.length === 0 && <div className="font-body text-xs text-inksoft mb-6">No hay expensas ni servicios por vencer esta semana.</div>}
+          {gastosPorPagar.map(({ p, v }) => (
+            <div key={p.id} className={`border rounded-lg p-3 mb-2 ${v.vencidoTodo || v.vencimiento.numero > 1 ? 'bg-rojosoft border-rojo' : 'border-line'}`}>
+              <div className="font-body text-xs font-semibold text-ink">{p.titulo}</div>
+              <div className="font-body text-[11px] text-inksoft">
+                {p.proveedor ? `${p.proveedor} · ` : ''}{formatoBs(v.vencimiento.monto)} ·{' '}
+                {v.vencidoTodo ? (
+                  <span className="text-rojo font-semibold">venció hace {Math.abs(v.diasParaVencer)} días</span>
+                ) : (
+                  <>
+                    {v.vencimiento.numero}.º vencimiento {v.diasParaVencer === 0 ? 'hoy' : `en ${v.diasParaVencer} días`}
+                    {v.ahorroSiPagaHoy > 0 ? ` · pagando antes te ahorrás ${formatoBs(v.ahorroSiPagaHoy)}` : ''}
+                  </>
+                )}
               </div>
             </div>
           ))}

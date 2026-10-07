@@ -6,9 +6,11 @@ import { useAuth } from '@/lib/auth'
 import { ESTADOS_UNIDAD, COMODIDADES, TIPOS_UNIDAD } from '@/data/inmuebles'
 import { FormUnidad } from './FormUnidad'
 import { Reparaciones } from './Reparaciones'
+import { formatoBs } from '@/lib/esquemaPago'
 
+// Monto con el símbolo de la moneda del espacio activo.
 function bs(n: number) {
-  return 'Bs ' + n.toLocaleString('es-BO', { minimumFractionDigits: 0 })
+  return formatoBs(n)
 }
 
 export function TarjetaUnidad({ unidad, onCambio }: { unidad: any; onCambio: () => void }) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDb, requerirUsuarioAprobado } from '@/lib/firebaseAdmin'
 import { sanearCuotas } from '@/lib/deudas'
+import { espacioDe, enEspacio } from '@/lib/espacioServidor'
 
 export const dynamic = 'force-dynamic'
 
@@ -9,13 +10,14 @@ export const dynamic = 'force-dynamic'
 export async function GET(req: NextRequest) {
   const chequeo = await requerirUsuarioAprobado(req)
   if ('error' in chequeo) return NextResponse.json({ error: chequeo.error }, { status: chequeo.status })
+  const esp = espacioDe(req, chequeo)
   try {
     const sp = req.nextUrl.searchParams
     let query = getDb().collection('deudas') as FirebaseFirestore.Query
     if (sp.get('alquilerId')) query = query.where('alquilerId', '==', sp.get('alquilerId'))
     else if (sp.get('unidadId')) query = query.where('unidadId', '==', sp.get('unidadId'))
     const snap = await query.get()
-    const deudas = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as any[]
+    const deudas = enEspacio(snap.docs.map((d) => ({ id: d.id, ...d.data() })) as any[], esp)
     deudas.sort((a, b) => (b.fechaAcuerdo || '').localeCompare(a.fechaAcuerdo || ''))
     return NextResponse.json({ deudas })
   } catch (err: any) {
@@ -28,6 +30,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const chequeo = await requerirUsuarioAprobado(req)
   if ('error' in chequeo) return NextResponse.json({ error: chequeo.error }, { status: chequeo.status })
+  const esp = espacioDe(req, chequeo)
   try {
     const b = await req.json()
     const cuotas = sanearCuotas(b.cuotas)
@@ -71,6 +74,7 @@ export async function POST(req: NextRequest) {
       documentoUrl: b.documentoUrl || null,
       notas: String(b.notas || '').trim(),
       estado: 'vigente',
+      espacio: esp.id,
       creadoPor: chequeo.usuario.uid,
       creadoPorNombre: chequeo.perfil.nombre,
       creadoEn: new Date().toISOString(),

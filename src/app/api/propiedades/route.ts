@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDb, requerirUsuarioAprobado } from '@/lib/firebaseAdmin'
+import { espacioDe, enEspacio } from '@/lib/espacioServidor'
 
 export const dynamic = 'force-dynamic'
 
@@ -8,10 +9,11 @@ export const dynamic = 'force-dynamic'
 export async function GET(req: NextRequest) {
   const chequeo = await requerirUsuarioAprobado(req)
   if ('error' in chequeo) return NextResponse.json({ error: chequeo.error }, { status: chequeo.status })
+  const esp = espacioDe(req, chequeo)
 
   try {
     const snap = await getDb().collection('propiedades').orderBy('creadoEn', 'desc').get()
-    const propiedades = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+    const propiedades = enEspacio(snap.docs.map((d) => ({ id: d.id, ...d.data() })) as any[], esp)
     return NextResponse.json({ propiedades })
   } catch (err: any) {
     console.error('GET /api/propiedades', err)
@@ -25,6 +27,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const chequeo = await requerirUsuarioAprobado(req)
   if ('error' in chequeo) return NextResponse.json({ error: chequeo.error }, { status: chequeo.status })
+  const esp = espacioDe(req, chequeo)
 
   try {
     const body = await req.json()
@@ -33,6 +36,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Falta el nombre de la propiedad.' }, { status: 400 })
     }
     const ref = await getDb().collection('propiedades').add({
+      espacio: esp.id,
       nombre: String(nombre).trim(),
       direccion: direccion || '',
       notas: notas || '',

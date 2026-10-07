@@ -9,6 +9,7 @@ import { EscanerCedula } from '@/components/EscanerCedula'
 import { SubirFirma } from '@/components/SubirFirma'
 import { ResumenPago } from '@/components/ResumenPago'
 import { EditorCanon, CanonForm, esquemaDesdeCanonForm, canonFormValido } from '@/components/EditorCanon'
+import { formatoBs } from '@/lib/esquemaPago'
 
 type ClausulaExtra = { titulo: string; texto: string }
 type Plantilla = { id: string; nombre: string; clausulas: ClausulaExtra[] }
@@ -20,8 +21,9 @@ function sumarUnAnio(iso: string) {
   return `${a + 1}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
 }
 
+// Monto con el símbolo de la moneda del espacio activo.
 function bs(n: number) {
-  return 'Bs ' + n.toLocaleString('es-BO', { minimumFractionDigits: 0 })
+  return formatoBs(n)
 }
 
 function hoyISO() {

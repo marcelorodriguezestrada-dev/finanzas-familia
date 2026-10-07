@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDb, requerirUsuarioAprobado } from '@/lib/firebaseAdmin'
+import { espacioDe, docDelEspacio } from '@/lib/espacioServidor'
 
 export const dynamic = 'force-dynamic'
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const chequeo = await requerirUsuarioAprobado(req)
   if ('error' in chequeo) return NextResponse.json({ error: chequeo.error }, { status: chequeo.status })
+  const esp = espacioDe(req, chequeo)
+  if (!(await docDelEspacio('movimientos', params.id, esp))) return NextResponse.json({ error: 'No se encontró (o es de otro espacio).' }, { status: 404 })
 
   try {
     const body = await req.json()
@@ -26,6 +29,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   const chequeo = await requerirUsuarioAprobado(req)
   if ('error' in chequeo) return NextResponse.json({ error: chequeo.error }, { status: chequeo.status })
+  const esp = espacioDe(req, chequeo)
+  if (!(await docDelEspacio('movimientos', params.id, esp))) return NextResponse.json({ error: 'No se encontró (o es de otro espacio).' }, { status: 404 })
 
   const db = getDb()
   const mov = await db.collection('movimientos').doc(params.id).get()
@@ -43,6 +48,13 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
       const estado = deuda.data()!.estado === 'cancelada' ? 'vigente' : deuda.data()!.estado
       await ref.set({ cuotas, estado }, { merge: true })
     }
+  }
+  // Si era el pago de un gasto por pagar, vuelve a quedar pendiente.
+  const pendienteId = mov.exists ? mov.data()!.pendienteId : null
+  if (pendienteId) {
+    const refP = db.collection('pendientes').doc(pendienteId)
+    const p = await refP.get()
+    if (p.exists && p.data()!.pago?.movimientoId === params.id) await refP.set({ estado: 'pendiente', pago: null }, { merge: true })
   }
   await db.collection('movimientos').doc(params.id).delete()
   return NextResponse.json({ ok: true })

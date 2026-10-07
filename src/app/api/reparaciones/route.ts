@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDb, requerirUsuarioAprobado } from '@/lib/firebaseAdmin'
+import { espacioDe, enEspacio, docDelEspacio } from '@/lib/espacioServidor'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,6 +11,7 @@ export const dynamic = 'force-dynamic'
 export async function GET(req: NextRequest) {
   const chequeo = await requerirUsuarioAprobado(req)
   if ('error' in chequeo) return NextResponse.json({ error: chequeo.error }, { status: chequeo.status })
+  const esp = espacioDe(req, chequeo)
 
   try {
     const { searchParams } = req.nextUrl
@@ -24,7 +26,7 @@ export async function GET(req: NextRequest) {
     if (resuelta !== null) query = query.where('resuelta', '==', resuelta === 'true')
 
     const snap = await query.get()
-    const reparaciones = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as any[]
+    const reparaciones = enEspacio(snap.docs.map((d) => ({ id: d.id, ...d.data() })) as any[], esp)
     reparaciones.sort((a, b) => (b.creadoEn || '').localeCompare(a.creadoEn || ''))
     return NextResponse.json({ reparaciones })
   } catch (err: any) {
@@ -39,6 +41,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const chequeo = await requerirUsuarioAprobado(req)
   if ('error' in chequeo) return NextResponse.json({ error: chequeo.error }, { status: chequeo.status })
+  const esp = espacioDe(req, chequeo)
 
   try {
     const body = await req.json()
@@ -48,7 +51,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Faltan datos (propiedad y detalle de la reparación).' }, { status: 400 })
     }
 
+    if (!(await docDelEspacio('propiedades', propiedadId, esp))) {
+      return NextResponse.json({ error: 'Esa propiedad no existe.' }, { status: 404 })
+    }
+
     const ref = await getDb().collection('reparaciones').add({
+      espacio: esp.id,
       propiedadId,
       unidadId: unidadId || null,
       detalle: String(detalle).trim(),

@@ -12,8 +12,9 @@ import { cuotaDelMes, esquemaDeAlquiler, esEscalonado, formatoBs } from '@/lib/e
 import { subirArchivo } from '@/lib/subirArchivo'
 import { resumirDeuda } from '@/lib/deudas'
 
+// Monto con el símbolo de la moneda del espacio activo.
 function bs(n: number) {
-  return 'Bs ' + n.toLocaleString('es-BO', { minimumFractionDigits: 0 })
+  return formatoBs(n)
 }
 
 function AlquileresContenido() {

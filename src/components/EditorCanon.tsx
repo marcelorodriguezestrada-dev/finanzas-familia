@@ -1,6 +1,7 @@
 'use client'
 
 import { EsquemaPago, normalizarEsquema, formatoBs } from '@/lib/esquemaPago'
+import { monedaActual, simboloDe } from '@/lib/monedas'
 
 // Un tramo del canon tal como se edita en pantalla (strings de los
 // inputs). meses vacío = "hasta el final del contrato".
@@ -89,7 +90,7 @@ export function EditorCanon({
               {tramos.length === 1 ? 'Canon mensual' : i === 0 ? 'Primeros meses' : `Desde el mes ${desde}`}
             </span>
             <div className="flex items-center gap-1">
-              <span className="font-body text-xs text-inksoft">Bs</span>
+              <span className="font-body text-xs text-inksoft">{simboloDe(monedaActual())}</span>
               <input
                 value={t.monto}
                 onChange={(e) => actualizarTramo(i, 'monto', e.target.value)}

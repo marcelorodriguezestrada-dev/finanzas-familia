@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDb, requerirUsuarioAprobado } from '@/lib/firebaseAdmin'
 import { FEE_ADMINISTRACION, calcularFee } from '@/data/inmuebles'
+import { esDelEspacio, ESPACIO_FAMILIA_OBJ } from '@/lib/espacioServidor'
 
 export const dynamic = 'force-dynamic'
 
@@ -59,11 +60,12 @@ export async function POST(req: NextRequest) {
       .where('fecha', '>=', desde)
       .where('fecha', '<=', hasta)
       .get()
-    const ingresosAlquiler = movSnap.docs.map((d) => d.data()) as any[]
+    // Solo la plata de la familia: los espacios personales no pagan fee.
+    const ingresosAlquiler = movSnap.docs.map((d) => d.data()).filter((d) => esDelEspacio(d, ESPACIO_FAMILIA_OBJ)) as any[]
 
     // Traemos todos los alquileres para poder cruzar propiedadId/unidadId → administrador.
     const alqSnap = await db.collection('alquileres').get()
-    const alquileres = alqSnap.docs.map((d) => d.data()) as any[]
+    const alquileres = alqSnap.docs.map((d) => d.data()).filter((d) => esDelEspacio(d, ESPACIO_FAMILIA_OBJ)) as any[]
     const administradorPorUnidad = new Map<string, { uid: string; nombre: string }>()
     for (const a of alquileres) {
       administradorPorUnidad.set(a.unidadId, { uid: a.administradorUid, nombre: a.administradorNombre })

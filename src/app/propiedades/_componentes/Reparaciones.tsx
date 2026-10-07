@@ -4,9 +4,11 @@ import { useEffect, useState } from 'react'
 import { useAuth } from '@/lib/auth'
 import { subirArchivo } from '@/lib/subirArchivo'
 import { PrioridadReparacion } from '@/data/inmuebles'
+import { formatoBs } from '@/lib/esquemaPago'
 
+// Monto con el símbolo de la moneda del espacio activo.
 function bs(n: number) {
-  return 'Bs ' + n.toLocaleString('es-BO', { minimumFractionDigits: 0 })
+  return formatoBs(n)
 }
 
 const COLOR_PRIORIDAD: Record<PrioridadReparacion, string> = {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getDb, requerirUsuarioAprobado } from '@/lib/firebaseAdmin'
 import { CATEGORIA_COBRO_DEUDA, ordenarCuotas } from '@/lib/deudas'
 import { formatoBs } from '@/lib/esquemaPago'
+import { espacioDe, docDelEspacio } from '@/lib/espacioServidor'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,6 +16,8 @@ export const dynamic = 'force-dynamic'
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const chequeo = await requerirUsuarioAprobado(req)
   if ('error' in chequeo) return NextResponse.json({ error: chequeo.error }, { status: chequeo.status })
+  const esp = espacioDe(req, chequeo)
+  if (!(await docDelEspacio('deudas', params.id, esp))) return NextResponse.json({ error: 'No se encontró (o es de otro espacio).' }, { status: 404 })
 
   try {
     const { numero, monto, fecha, deshacer } = await req.json()
@@ -53,6 +56,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
       const movRef = db.collection('movimientos').doc()
       tx.set(movRef, {
+        espacio: deuda.espacio || 'familia',
+        moneda: esp.moneda,
         tipo: 'ingreso',
         monto: montoCobrado,
         categoria: CATEGORIA_COBRO_DEUDA,

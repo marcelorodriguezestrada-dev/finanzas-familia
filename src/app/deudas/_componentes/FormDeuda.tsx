@@ -7,6 +7,7 @@ import {
   CuotaDeuda, generarCuotasDeuda, resumirDeuda, describirPlan, ordenarCuotas, normalizarCI, normalizarNombre, fechaLarga,
 } from '@/lib/deudas'
 import { formatoBs } from '@/lib/esquemaPago'
+import { monedaActual, simboloDe } from '@/lib/monedas'
 
 type CuotaForm = { monto: string; vence: string }
 
@@ -263,7 +264,7 @@ export function FormDeuda({
 
       <div className="font-body text-sm font-semibold text-ink mb-1 mt-4">Acuerdo</div>
       <div className="grid sm:grid-cols-4 gap-3 mb-3">
-        <div><label className={etiqueta}>Monto reconocido (Bs)</label><input type="number" value={montoTotal} onChange={(e) => setMontoTotal(e.target.value)} className={input} /></div>
+        <div><label className={etiqueta}>Monto reconocido ({simboloDe(monedaActual())})</label><input type="number" value={montoTotal} onChange={(e) => setMontoTotal(e.target.value)} className={input} /></div>
         <div><label className={etiqueta}>Interés mensual (%)</label><input type="number" value={tasa} onChange={(e) => setTasa(e.target.value)} placeholder="opcional" className={input} /></div>
         <div><label className={etiqueta}>Fecha del acuerdo</label><input type="date" value={fechaAcuerdo} onChange={(e) => setFechaAcuerdo(e.target.value)} className={input} /></div>
         <div><label className={etiqueta}>Lugar</label><input value={lugar} onChange={(e) => setLugar(e.target.value)} className={input} /></div>
@@ -274,7 +275,7 @@ export function FormDeuda({
       <div className="border border-line rounded-lg p-3 mb-3 bg-white/50">
         <div className="font-body text-[11px] text-inksoft mb-2">Generador rápido: cuotas iguales mensuales hasta completar el monto (la última ajusta el resto).</div>
         <div className="flex gap-2 flex-wrap items-end">
-          <div><label className={etiqueta}>Cuota de (Bs)</label><input type="number" value={genMonto} onChange={(e) => setGenMonto(e.target.value)} className="w-28 px-3 py-2 rounded-lg border border-line font-body text-sm" /></div>
+          <div><label className={etiqueta}>Cuota de ({simboloDe(monedaActual())})</label><input type="number" value={genMonto} onChange={(e) => setGenMonto(e.target.value)} className="w-28 px-3 py-2 rounded-lg border border-line font-body text-sm" /></div>
           <div><label className={etiqueta}>Primer vencimiento</label><input type="date" value={genPrimera} onChange={(e) => setGenPrimera(e.target.value)} className="px-3 py-2 rounded-lg border border-line font-body text-sm" /></div>
           <button type="button" onClick={generar} className="px-3 py-2 rounded-lg border border-line font-body text-xs text-ink">Generar cuotas</button>
         </div>
@@ -284,7 +285,7 @@ export function FormDeuda({
         <div className="max-h-72 overflow-y-auto border border-line rounded-lg mb-2">
           <table className="w-full font-body text-xs">
             <thead className="sticky top-0 bg-ink text-white">
-              <tr><th className="text-left px-2 py-1.5">#</th><th className="text-left px-2 py-1.5">Vence</th><th className="text-left px-2 py-1.5">Monto (Bs)</th><th /></tr>
+              <tr><th className="text-left px-2 py-1.5">#</th><th className="text-left px-2 py-1.5">Vence</th><th className="text-left px-2 py-1.5">Monto ({simboloDe(monedaActual())})</th><th /></tr>
             </thead>
             <tbody>
               {cuotas.map((c, i) => (

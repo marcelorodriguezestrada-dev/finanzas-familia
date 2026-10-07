@@ -30,7 +30,7 @@ function leerCookie(): TipoEspacio {
 }
 
 export function EspacioProvider({ children }: { children: React.ReactNode }) {
-  const { perfil, obtenerToken, recargarPerfil, usuario } = useAuth() as any
+  const { perfil, obtenerToken, recargarPerfil, usuario, cargando } = useAuth() as any
   const [espacio, setEspacio] = useState<TipoEspacio>('familia')
 
   useEffect(() => {
@@ -38,13 +38,17 @@ export function EspacioProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   // Al cerrar sesión vuelve a la familia (para que el próximo que entre
-  // en este navegador no arranque en un espacio personal vacío).
+  // en este navegador no arranque en un espacio personal vacío). OJO: solo
+  // cuando Firebase YA terminó de restaurar la sesión (cargando=false):
+  // al abrir la página `usuario` es null por un instante y antes esto
+  // volvía la cookie a "familia" en cada recarga, así que el botón
+  // "Mis finanzas" parecía no hacer nada.
   useEffect(() => {
-    if (usuario === null && leerCookie() === 'personal') {
+    if (!cargando && usuario === null && leerCookie() === 'personal') {
       document.cookie = `${COOKIE_ESPACIO}=familia; path=/; max-age=31536000; SameSite=Lax`
       setEspacio('familia')
     }
-  }, [usuario])
+  }, [usuario, cargando])
 
   const moneda = espacio === 'personal' ? perfil?.monedaPersonal || MONEDA_PERSONAL_POR_DEFECTO : MONEDA_FAMILIA
   // Antes de que pinten los hijos: los formateadores de montos leen esto.

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useAuth } from '@/lib/auth'
+import { useEspacio } from '@/lib/espacioCliente'
 import { PaginaProtegida } from '@/components/PaginaProtegida'
 import { TarjetaUnidad } from './_componentes/TarjetaUnidad'
 import { FormUnidad } from './_componentes/FormUnidad'
@@ -9,7 +10,24 @@ import { Reparaciones } from './_componentes/Reparaciones'
 import { IngresoInteligenteEspacios } from './_componentes/IngresoInteligenteEspacios'
 
 export default function PropiedadesPage() {
-  const { obtenerToken } = useAuth()
+  const { obtenerToken, usuario } = useAuth()
+  const { esPersonal } = useEspacio()
+
+  // Pasa la propiedad (con sus unidades, reparaciones, gastos por pagar y
+  // movimientos) al otro espacio.
+  async function moverPropiedad(p: any) {
+    const destino = esPersonal ? 'Familia' : 'Mis finanzas'
+    if (!confirm(`¿Pasar "${p.nombre}" con todo lo que tiene cargado a ${destino}?${esPersonal ? '' : ' Dejará de verse en las finanzas de la familia.'}`)) return
+    const token = await obtenerToken()
+    const d = await fetch('/api/mover-espacio', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ tipo: 'propiedad', id: p.id }),
+    }).then((r) => r.json())
+    if (d.error) return alert(d.error)
+    alert(`Listo: se pasaron ${d.movidos} registro(s) a ${d.destino}.`)
+    cargar()
+  }
   const [propiedades, setPropiedades] = useState<any[]>([])
   const [unidadesPorPropiedad, setUnidadesPorPropiedad] = useState<Record<string, any[]>>({})
   const [cargando, setCargando] = useState(true)
@@ -236,6 +254,11 @@ export default function PropiedadesPage() {
                   <button onClick={() => iniciarEdicionPropiedad(p)} className="font-body text-[11px] text-ink underline">
                     Editar
                   </button>
+                  {(esPersonal || !p.creadoPor || p.creadoPor === usuario?.uid) && (
+                    <button onClick={() => moverPropiedad(p)} className="font-body text-[11px] text-ink underline">
+                      {esPersonal ? 'Pasar a Familia' : 'Pasar a Mis finanzas'}
+                    </button>
+                  )}
                   <button onClick={() => borrarPropiedad(p.id)} className="font-body text-[11px] text-rojo underline">
                     Borrar
                   </button>

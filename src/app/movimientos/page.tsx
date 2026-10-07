@@ -5,6 +5,8 @@ import { useAuth } from '@/lib/auth'
 import { PaginaProtegida } from '@/components/PaginaProtegida'
 import { CATEGORIAS_GASTO, CATEGORIAS_INGRESO, mesActual } from '@/data/categorias'
 import { formatoBs } from '@/lib/esquemaPago'
+import { useEspacio } from '@/lib/espacioCliente'
+import { simboloDe } from '@/lib/monedas'
 
 // Monto con el símbolo de la moneda del espacio activo.
 function bs(n: number) {
@@ -17,6 +19,37 @@ function hoyISO() {
 
 export default function MovimientosPage() {
   const { obtenerToken, perfil, usuario } = useAuth()
+  const { esPersonal } = useEspacio()
+  const [moviendo, setMoviendo] = useState<string | null>(null)
+
+  // Pasa el movimiento al otro espacio (Familia <-> Mis finanzas). Si las
+  // monedas son distintas, pide el monto convertido.
+  async function mover(m: any) {
+    const destino = esPersonal ? 'Familia' : 'Mis finanzas'
+    if (!confirm(`¿Pasar "${m.descripcion || m.categoria}" a ${destino}?${esPersonal ? '' : ' Dejará de verse en las finanzas de la familia.'}`)) return
+    setMoviendo(m.id)
+    try {
+      const token = await obtenerToken()
+      const enviar = (extra: any = {}) =>
+        fetch('/api/mover-espacio', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ tipo: 'movimiento', id: m.id, ...extra }),
+        }).then((r) => r.json())
+      let d = await enviar()
+      if (d.necesitaConversion) {
+        const txt = prompt(`${d.error}\n¿Cuánto es ${simboloDe(d.monedaOrigen)} ${d.monto} en ${simboloDe(d.monedaDestino)}?`)
+        if (!txt) return
+        const convertido = Number(txt.replace(/\./g, '').replace(',', '.'))
+        if (!(convertido > 0)) return alert('Monto no válido.')
+        d = await enviar({ montoConvertido: convertido })
+      }
+      if (d.error) return alert(d.error)
+      cargar()
+    } finally {
+      setMoviendo(null)
+    }
+  }
 
   const [mesFiltro, setMesFiltro] = useState(mesActual())
   const [movimientos, setMovimientos] = useState<any[]>([])
@@ -180,6 +213,11 @@ export default function MovimientosPage() {
             <div className={`font-body text-sm font-semibold ${m.tipo === 'ingreso' ? 'text-verde' : 'text-rojo'}`}>
               {m.tipo === 'ingreso' ? '+' : '-'}{bs(m.monto)}
             </div>
+            {!m.alquilerId && !m.deudaId && !m.pendienteId && (esPersonal || !m.registradoPor || m.registradoPor === usuario?.uid) && (
+              <button onClick={() => mover(m)} disabled={moviendo === m.id} className="font-body text-[11px] text-ink underline disabled:opacity-50">
+                {moviendo === m.id ? 'Moviendo...' : esPersonal ? 'Pasar a Familia' : 'Pasar a Mis finanzas'}
+              </button>
+            )}
             <button onClick={() => borrar(m.id)} className="font-body text-[11px] text-rojo underline">
               Borrar
             </button>

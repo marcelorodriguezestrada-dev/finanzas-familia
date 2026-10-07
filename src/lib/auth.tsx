@@ -57,6 +57,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   async function obtenerToken() {
+    // Al abrir o recargar una página, Firebase tarda un instante en
+    // restaurar la sesión guardada. Las pantallas piden sus datos apenas
+    // se montan: sin esta espera el pedido salía sin token y la API
+    // respondía 401 ("no me deja ver"). authStateReady() resuelve cuando
+    // la sesión ya está restaurada (o se sabe que no hay).
+    await auth.authStateReady()
     if (!auth.currentUser) return ''
     return auth.currentUser.getIdToken()
   }

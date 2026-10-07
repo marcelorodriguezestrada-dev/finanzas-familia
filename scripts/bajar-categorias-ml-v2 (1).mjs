@@ -15,7 +15,7 @@
 // Uso:
 //   node bajar-categorias-ml-v2.mjs
 //
-// Salida: categorias-mercadolibre-ar.csv en la misma carpeta.
+// Salida: categorias-mercadolibre-ar.csv en la misma carpeta. ok
 
 import puppeteer from 'puppeteer'
 import { writeFileSync } from 'fs'

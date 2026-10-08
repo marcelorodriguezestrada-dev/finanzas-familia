@@ -8,6 +8,7 @@ import { CATEGORIAS_GASTO } from '@/data/categorias'
 import { formatoBs, fechaCorta, etiquetaMes, redondear } from '@/lib/esquemaPago'
 import { Vencimiento, Concepto, vencimientoVigente, situacion, SituacionPendiente, ubicarUnidad } from '@/lib/pendientes'
 import { Historial } from './_componentes/Historial'
+import { ImportarGastos } from './_componentes/ImportarGastos'
 import { useEspacio } from '@/lib/espacioCliente'
 
 const SITUACION: Record<SituacionPendiente, { txt: string; cls: string }> = {
@@ -34,6 +35,7 @@ export default function PendientesPage() {
   const [unidades, setUnidades] = useState<any[]>([])
   const [cargando, setCargando] = useState(true)
   const [mostrarForm, setMostrarForm] = useState(false)
+  const [mostrarImportar, setMostrarImportar] = useState(false)
   const [verPagados, setVerPagados] = useState(false)
   const [abierto, setAbierto] = useState<string | null>(null)
   const [mensajes, setMensajes] = useState<Record<string, string>>({})
@@ -126,11 +128,18 @@ export default function PendientesPage() {
             Expensas, servicios e impuestos que llegan con vencimiento. Subí el PDF, pagalo a tiempo y queda registrado como gasto{esPersonal ? ' en Mis finanzas' : ''}.
           </div>
         </div>
-        {!mostrarForm && (
-          <button onClick={() => setMostrarForm(true)} className="shrink-0 min-h-[44px] px-3 rounded-lg bg-ink text-white font-body text-xs font-semibold">
-            + Cargar gasto por pagar
-          </button>
-        )}
+        <div className="flex gap-2 shrink-0 flex-wrap justify-end">
+          {!mostrarImportar && (
+            <button onClick={() => setMostrarImportar(true)} className="min-h-[44px] px-3 rounded-lg border border-line bg-white text-ink font-body text-xs font-semibold">
+              Importar (planilla, texto o facturas)
+            </button>
+          )}
+          {!mostrarForm && (
+            <button onClick={() => setMostrarForm(true)} className="min-h-[44px] px-3 rounded-lg bg-ink text-white font-body text-xs font-semibold">
+              + Cargar uno
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="flex rounded-lg border border-line overflow-hidden w-fit mb-5" role="tablist" aria-label="Vista">
@@ -147,6 +156,7 @@ export default function PendientesPage() {
         <Historial pendientes={pendientes} propiedades={propiedades} unidades={unidades} onCambio={cargar} />
       ) : (
         <>
+          {mostrarImportar && <ImportarGastos propiedades={propiedades} onListo={cargar} onCerrar={() => setMostrarImportar(false)} />}
           {mostrarForm && (
             <FormPendiente
               propiedades={propiedades}

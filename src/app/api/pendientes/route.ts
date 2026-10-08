@@ -44,7 +44,14 @@ export async function POST(req: NextRequest) {
     if (b.periodo && (b.unidadId || b.propiedadId)) {
       const previos = enEspacio((await db.collection('pendientes').where('periodo', '==', b.periodo).get()).docs.map((d) => d.data()), esp)
       const repetido = previos.find(
-        (p: any) => p.estado !== 'anulado' && p.categoria === (b.categoria || 'Expensas') && (p.unidadId || null) === (b.unidadId || null) && (p.propiedadId || null) === (b.propiedadId || null)
+        (p: any) =>
+          p.estado !== 'anulado' &&
+          p.categoria === (b.categoria || 'Expensas') &&
+          (p.unidadId || null) === (b.unidadId || null) &&
+          (p.propiedadId || null) === (b.propiedadId || null) &&
+          // en un mismo mes y propiedad puede haber luz, gas, ABL...: solo
+          // es repetido si además coincide el título
+          String(p.titulo || '').trim().toLowerCase() === String(b.titulo || '').trim().toLowerCase()
       )
       if (repetido) return NextResponse.json({ error: `Ya está cargado "${repetido.titulo}" para ese período.` }, { status: 409 })
     }

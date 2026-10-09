@@ -63,29 +63,30 @@ export async function POST(req: NextRequest) {
     // Solo la plata de la familia: los espacios personales no pagan fee.
     const ingresosAlquiler = movSnap.docs.map((d) => d.data()).filter((d) => esDelEspacio(d, ESPACIO_FAMILIA_OBJ)) as any[]
 
-    // Traemos todos los alquileres para poder cruzar propiedadId/unidadId → administrador.
+    // Cada cobro se le asigna a quien administraba ESE alquiler en la
+    // fecha del cobro (historialAdministracion), así cambiar de
+    // administrador a mitad de año no le pasa los meses anteriores al nuevo.
     const alqSnap = await db.collection('alquileres').get()
-    const alquileres = alqSnap.docs.map((d) => d.data()).filter((d) => esDelEspacio(d, ESPACIO_FAMILIA_OBJ)) as any[]
-    const administradorPorUnidad = new Map<string, { uid: string; nombre: string }>()
-    for (const a of alquileres) {
-      administradorPorUnidad.set(a.unidadId, { uid: a.administradorUid, nombre: a.administradorNombre })
+    const alquileres = alqSnap.docs
+      .map((d) => ({ id: d.id, ...d.data() }) as any)
+      .filter((d) => esDelEspacio(d, ESPACIO_FAMILIA_OBJ))
+    const porId = new Map<string, any>(alquileres.map((a) => [a.id, a]))
+    const adminEnFecha = (a: any, fecha: string): { uid: string; nombre: string } | undefined => {
+      const h: any[] = Array.isArray(a?.historialAdministracion) ? a.historialAdministracion : []
+      const vigente = [...h].reverse().find((x) => x.desde <= fecha)
+      if (vigente) return { uid: vigente.uid, nombre: vigente.nombre }
+      return a?.administradorUid ? { uid: a.administradorUid, nombre: a.administradorNombre } : undefined
     }
-    const unidadesSnap = await db.collection('unidades').get()
-    const propiedadDeUnidad = new Map<string, string>()
-    for (const u of unidadesSnap.docs) propiedadDeUnidad.set(u.id, (u.data() as any).propiedadId)
 
     const totalPorAdministrador = new Map<string, { nombre: string; total: number }>()
     for (const mov of ingresosAlquiler) {
-      // El movimiento de "cobrar alquiler" guarda propiedadId. Buscamos
-      // qué unidad de esa propiedad tiene administrador asignado (caso
-      // simple: una unidad activa por propiedad al momento del cobro).
-      let admin: { uid: string; nombre: string } | undefined
-      for (const [unidadId, prop] of propiedadDeUnidad.entries()) {
-        if (prop === mov.propiedadId && administradorPorUnidad.has(unidadId)) {
-          admin = administradorPorUnidad.get(unidadId)
-          break
-        }
-      }
+      // El cobro guarda alquilerId; los viejos solo propiedadId: en ese
+      // caso se usa el alquiler de esa propiedad vigente en la fecha.
+      const alq =
+        (mov.alquilerId && porId.get(mov.alquilerId)) ||
+        alquileres.find((a) => a.propiedadId === mov.propiedadId && a.fechaInicio <= mov.fecha && (!a.fechaFin || a.fechaFin >= mov.fecha)) ||
+        alquileres.find((a) => a.propiedadId === mov.propiedadId)
+      const admin = alq ? adminEnFecha(alq, mov.fecha) : undefined
       if (!admin || !admin.uid) continue
       const actual = totalPorAdministrador.get(admin.uid) || { nombre: admin.nombre, total: 0 }
       actual.total += Number(mov.monto || 0)

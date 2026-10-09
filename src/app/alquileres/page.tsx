@@ -11,6 +11,7 @@ import { EditorCanon, CanonForm, canonFormDesdeEsquema, esquemaDesdeCanonForm, c
 import { cuotaDelMes, esquemaDeAlquiler, esEscalonado, formatoBs } from '@/lib/esquemaPago'
 import { subirArchivo } from '@/lib/subirArchivo'
 import { resumirDeuda } from '@/lib/deudas'
+import { EditarAlquiler } from './_componentes/EditarAlquiler'
 
 // Monto con el símbolo de la moneda del espacio activo.
 function bs(n: number) {
@@ -40,6 +41,7 @@ function AlquileresContenido() {
   const [guardandoPlan, setGuardandoPlan] = useState(false)
   const [subiendoContrato, setSubiendoContrato] = useState<string | null>(null)
   const [deudas, setDeudas] = useState<any[]>([])
+  const [editando, setEditando] = useState<string | null>(null)
 
   async function cargar() {
     setCargando(true)
@@ -251,9 +253,14 @@ function AlquileresContenido() {
 
               <div className="font-body text-[11px] text-inksoft mt-1">
                 Desde {a.fechaInicio}{a.fechaFin ? ` hasta ${a.fechaFin}` : ''} · Administra: {a.administradorNombre || '—'}
+                {a.inquilinoTelefono ? ` · 📞 ${a.inquilinoTelefono}` : ''}
               </div>
+              {a.notas && <div className="font-body text-[11px] text-inksoft mt-0.5">📝 {a.notas}</div>}
 
               <div className="flex gap-3 mt-2 flex-wrap">
+                <button onClick={() => { setEditando(editando === a.id ? null : a.id); setEditandoPlan(null) }} className="font-body text-[11px] text-ink font-semibold underline">
+                  {editando === a.id ? 'Cerrar edición' : '✎ Editar datos'}
+                </button>
                 {a.contratoUrl && (
                   <a href={a.contratoUrl} target="_blank" rel="noreferrer" className="font-body text-[11px] text-ink underline">
                     Ver contrato firmado
@@ -279,7 +286,7 @@ function AlquileresContenido() {
                 )}
                 {a.estado === 'activo' && (
                   <>
-                    <button onClick={() => (editandoPlan === a.id ? setEditandoPlan(null) : abrirEditorPlan(a))} className="font-body text-[11px] text-ink underline">
+                    <button onClick={() => { setEditando(null); editandoPlan === a.id ? setEditandoPlan(null) : abrirEditorPlan(a) }} className="font-body text-[11px] text-ink underline">
                       {editandoPlan === a.id ? 'Cerrar plan de pago' : 'Editar plan de pago'}
                     </button>
                     <button onClick={() => cobrarMes(a.id)} disabled={cobrando === a.id} className="font-body text-[11px] text-verde underline disabled:opacity-50">
@@ -305,6 +312,22 @@ function AlquileresContenido() {
                     </a>
                   )
                 })}
+
+              {editando === a.id && (
+                <EditarAlquiler
+                  alquiler={a}
+                  miembros={miembros}
+                  propiedades={propiedades}
+                  unidades={unidades}
+                  alquileres={alquileres}
+                  onCancelar={() => setEditando(null)}
+                  onGuardado={(msg) => {
+                    setEditando(null)
+                    setMensajeCobro((m) => ({ ...m, [a.id]: msg }))
+                    cargar()
+                  }}
+                />
+              )}
 
               {editandoPlan === a.id && planForm && (
                 <div className="mt-3">

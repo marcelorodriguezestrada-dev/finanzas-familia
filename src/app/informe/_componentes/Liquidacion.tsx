@@ -6,7 +6,9 @@ import { monedaActual, simboloDe } from '@/lib/monedas'
 
 export type DatosPago = {
   nombreAdministracion: string // "Administración Familia Rodríguez Estrada"
-  administrador: string // persona que administra
+  // Ya no se usa en los avisos: quién administra sale de cada alquiler
+  // ("Editar datos"). Queda solo como respaldo si no hay alquileres.
+  administrador: string
   direccion: string
   telefono: string
   titular: string
@@ -60,8 +62,9 @@ function AvisoInquilino({ c, inf, pago }: { c: CuentaAlquiler; inf: Informe; pag
       <div className="grid grid-cols-2 gap-6">
         <div>
           <div className="font-bold text-[#1C3A5E] text-sm">Administración</div>
-          <div className="font-bold mt-1">{pago.nombreAdministracion || pago.administrador || a.administradorNombre || 'Familia'}</div>
-          {pago.nombreAdministracion && (pago.administrador || a.administradorNombre) && <div>Administra: {pago.administrador || a.administradorNombre}</div>}
+          <div className="font-bold mt-1">{pago.nombreAdministracion || 'Familia'}</div>
+          {/* Quién administra ESTE alquiler (se cambia en Alquileres → Editar datos) */}
+          {(a.administradorNombre || pago.administrador) && <div>Administra: {a.administradorNombre || pago.administrador}</div>}
           {pago.direccion && <div>{pago.direccion}</div>}
           {pago.telefono && <div>Tel.: {pago.telefono}</div>}
         </div>
@@ -180,6 +183,9 @@ function AvisoInquilino({ c, inf, pago }: { c: CuentaAlquiler; inf: Informe; pag
 
 export function Liquidacion({ inf, pago }: { inf: Informe; pago: DatosPago }) {
   const avisos = inf.cuentas.filter((c) => c.alquiler.estado === 'activo' && c.proxima)
+  // Quiénes firman: los administradores de los alquileres incluidos.
+  const firmantes = Array.from(new Set(inf.cuentas.map((c) => c.alquiler.administradorNombre).filter(Boolean))) as string[]
+  if (!firmantes.length) firmantes.push(pago.administrador || pago.nombreAdministracion || 'Administración')
   const total = avisos.length + 2
   let k = 0
 
@@ -372,12 +378,15 @@ export function Liquidacion({ inf, pago }: { inf: Informe; pago: DatosPago }) {
           </ol>
         </div>
 
-        <div className="flex justify-end">
-          <div className="w-full text-center">
-            <div className="h-12 w-full border-b-2 border-[#1C3A5E]" />
-            <div className="font-bold text-[#1C3A5E] mt-1 uppercase">{pago.administrador || pago.nombreAdministracion || 'Administración'}</div>
-            <div className="text-[#4A5565]">{pago.administrador && pago.nombreAdministracion ? pago.nombreAdministracion : 'Administrador/a'}</div>
-          </div>
+        <div className="flex flex-col gap-5 justify-end">
+          {/* Firma cada persona que administra alguno de los alquileres de esta liquidación */}
+          {firmantes.map((nombre) => (
+            <div key={nombre} className="w-full text-center">
+              <div className="h-12 w-full border-b-2 border-[#1C3A5E]" />
+              <div className="font-bold text-[#1C3A5E] mt-1 uppercase">{nombre}</div>
+              <div className="text-[#4A5565]">{pago.nombreAdministracion ? `Administra · ${pago.nombreAdministracion}` : 'Administrador/a'}</div>
+            </div>
+          ))}
         </div>
         </div>
       </Hoja>

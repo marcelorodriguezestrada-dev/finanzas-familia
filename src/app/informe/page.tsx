@@ -19,7 +19,7 @@ const CLAVE_PAGO = 'informe:datosPago'
 // Todo se calcula en el navegador con lo que ya está cargado; "PDF" usa
 // la impresión del navegador (Guardar como PDF), con hojas A4.
 export default function InformePage() {
-  const { obtenerToken, perfil } = useAuth()
+  const { obtenerToken } = useAuth()
   const { esPersonal } = useEspacio()
   const [datos, setDatos] = useState<any | null>(null)
   const [error, setError] = useState('')
@@ -73,10 +73,6 @@ export default function InformePage() {
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  useEffect(() => {
-    if (perfil?.nombre) setPago((p) => (p.administrador ? p : { ...p, administrador: perfil.nombre }))
-  }, [perfil])
 
   useEffect(() => {
     const limpiar = () => setReciboId(null)
@@ -191,11 +187,10 @@ export default function InformePage() {
         {vista === 'liquidacion' && editandoPago && (
           <div className="bg-panel border border-line rounded-xl p-4 mb-6">
             <div className="font-body text-sm font-semibold text-ink mb-1">Datos que salen en los avisos y recibos</div>
-            <div className="font-body text-[11px] text-inksoft mb-3">Se guardan para {esPersonal ? 'tu espacio' : 'toda la familia'} y salen en el encabezado de cada aviso, en la firma de la liquidación y en los recibos. Mientras escribís, la vista de abajo se actualiza.</div>
+            <div className="font-body text-[11px] text-inksoft mb-3">Se guardan para {esPersonal ? 'tu espacio' : 'toda la familia'} y salen en el encabezado de cada aviso y en los recibos. Quién administra cada departamento se elige en cada alquiler (Alquileres → ✎ Editar datos). Mientras escribís, la vista de abajo se actualiza.</div>
             <div className="grid sm:grid-cols-2 gap-3">
               {([
                 ['nombreAdministracion', 'Nombre de la administración (ej. Administración Familia Rodríguez Estrada)'],
-                ['administrador', 'Quién administra (persona)'],
                 ['direccion', 'Dirección (opcional)'],
                 ['telefono', 'Teléfono de contacto'],
                 ['titular', 'Titular de la cuenta'],

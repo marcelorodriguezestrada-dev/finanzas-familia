@@ -46,7 +46,7 @@ export function Recibo({ mov, cuenta, pago, firma }: { mov: any; cuenta: CuentaA
       <div className="px-4 py-2 border-b border-[#1C3A5E] flex justify-between gap-3">
         <div>
           <b>{pago.nombreAdministracion || 'Administración'}</b>
-          {(pago.administrador || a.administradorNombre) ? ` · Administra: ${pago.administrador || a.administradorNombre}` : ''}
+          {(a.administradorNombre || pago.administrador) ? ` · Administra: ${a.administradorNombre || pago.administrador}` : ''}
           {pago.telefono ? ` · Tel. ${pago.telefono}` : ''}
           <br />
           {cuenta.lugar}

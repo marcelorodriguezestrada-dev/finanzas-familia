@@ -4,7 +4,15 @@ import { Informe, CuentaAlquiler, sumarMesClave, MORA_DIARIA } from '@/lib/infor
 import { formatoBs, fechaCorta, etiquetaMes, calcularPlanDePago, esquemaDeAlquiler } from '@/lib/esquemaPago'
 import { monedaActual, simboloDe } from '@/lib/monedas'
 
-export type DatosPago = { titular: string; banco: string; cuenta: string; telefono: string; administrador: string }
+export type DatosPago = {
+  nombreAdministracion: string // "Administración Familia Rodríguez Estrada"
+  administrador: string // persona que administra
+  direccion: string
+  telefono: string
+  titular: string
+  banco: string
+  cuenta: string
+}
 
 // Liquidación mensual con el formato de las expensas: una hoja de
 // aviso por inquilino, estado de cuentas + gastos por rubro, y caja +
@@ -19,11 +27,11 @@ const n = (v: number) => formatoBs(v, false)
 // Símbolo de la moneda del espacio activo (Bs en la familia).
 const sim = () => simboloDe(monedaActual())
 
-function Hoja({ children, numero, total, inf }: { children: React.ReactNode; numero: number; total: number; inf: Informe }) {
+function Hoja({ children, numero, total, inf, pago }: { children: React.ReactNode; numero: number; total: number; inf: Informe; pago: DatosPago }) {
   return (
     <section className="hoja bg-white shadow-sm print:shadow-none border border-[#DCE2EA] print:border-0 mb-6 print:mb-0 text-[#1F2733] text-[13px] flex flex-col">
       <div className="bg-[#1C3A5E] border-b-4 border-[#B3831F] px-6 py-2.5 flex justify-between text-white gap-3 flex-wrap">
-        <span className="font-bold">Liquidación de alquileres{inf.propiedadNombre ? ` · ${inf.propiedadNombre}` : ''}</span>
+        <span className="font-bold">Liquidación de alquileres{pago.nombreAdministracion ? ` · ${pago.nombreAdministracion}` : ''}{inf.propiedadNombre ? ` · ${inf.propiedadNombre}` : ''}</span>
         <span className="text-[#E9D8AE]">Período {inf.mes.slice(5)}/{inf.mes.slice(0, 4)}</span>
       </div>
       <div className="px-6 py-5 flex flex-col gap-4 flex-1">{children}</div>
@@ -52,7 +60,9 @@ function AvisoInquilino({ c, inf, pago }: { c: CuentaAlquiler; inf: Informe; pag
       <div className="grid grid-cols-2 gap-6">
         <div>
           <div className="font-bold text-[#1C3A5E] text-sm">Administración</div>
-          <div className="font-bold mt-1">{pago.administrador || a.administradorNombre || 'Familia'}</div>
+          <div className="font-bold mt-1">{pago.nombreAdministracion || pago.administrador || a.administradorNombre || 'Familia'}</div>
+          {pago.nombreAdministracion && (pago.administrador || a.administradorNombre) && <div>Administra: {pago.administrador || a.administradorNombre}</div>}
+          {pago.direccion && <div>{pago.direccion}</div>}
           {pago.telefono && <div>Tel.: {pago.telefono}</div>}
         </div>
         <div className="text-right">
@@ -176,12 +186,12 @@ export function Liquidacion({ inf, pago }: { inf: Informe; pago: DatosPago }) {
   return (
     <div>
       {avisos.map((c) => (
-        <Hoja key={c.alquiler.id} numero={++k} total={total} inf={inf}>
+        <Hoja key={c.alquiler.id} numero={++k} total={total} inf={inf} pago={pago}>
           <AvisoInquilino c={c} inf={inf} pago={pago} />
         </Hoja>
       ))}
 
-      <Hoja numero={++k} total={total} inf={inf}>
+      <Hoja numero={++k} total={total} inf={inf} pago={pago}>
         <div>
           <div className={banda}>ESTADO DE CUENTAS POR UNIDAD</div>
           <div className="overflow-x-auto">
@@ -276,7 +286,7 @@ export function Liquidacion({ inf, pago }: { inf: Informe; pago: DatosPago }) {
         </div>
       </Hoja>
 
-      <Hoja numero={++k} total={total} inf={inf}>
+      <Hoja numero={++k} total={total} inf={inf} pago={pago}>
         <div>
           <div className={banda}>DETALLE DE INGRESOS Y EGRESOS</div>
           <table className="w-full border-collapse text-xs">
@@ -365,8 +375,8 @@ export function Liquidacion({ inf, pago }: { inf: Informe; pago: DatosPago }) {
         <div className="flex justify-end">
           <div className="w-full text-center">
             <div className="h-12 w-full border-b-2 border-[#1C3A5E]" />
-            <div className="font-bold text-[#1C3A5E] mt-1 uppercase">{pago.administrador || 'Administración'}</div>
-            <div className="text-[#4A5565]">Administrador/a</div>
+            <div className="font-bold text-[#1C3A5E] mt-1 uppercase">{pago.administrador || pago.nombreAdministracion || 'Administración'}</div>
+            <div className="text-[#4A5565]">{pago.administrador && pago.nombreAdministracion ? pago.nombreAdministracion : 'Administrador/a'}</div>
           </div>
         </div>
         </div>

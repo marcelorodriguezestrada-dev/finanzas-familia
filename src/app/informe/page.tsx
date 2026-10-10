@@ -27,7 +27,10 @@ export default function InformePage() {
   const [mes, setMes] = useState(sumarMesClave(mesActual(), -1))
   const [vista, setVista] = useState<Vista>('simple')
   const [propiedadId, setPropiedadId] = useState('')
-  const [pago, setPago] = useState<DatosPago>({ titular: '', banco: '', cuenta: '', telefono: '', administrador: '' })
+  const [pago, setPago] = useState<DatosPago>({ nombreAdministracion: '', administrador: '', direccion: '', telefono: '', titular: '', banco: '', cuenta: '' })
+  const [pagoGuardado, setPagoGuardado] = useState<DatosPago | null>(null)
+  const [guardandoPago, setGuardandoPago] = useState(false)
+  const [msgPago, setMsgPago] = useState('')
   const [editandoPago, setEditandoPago] = useState(false)
   // Qué se imprime: la vista actual, o un recibo puntual.
   const [reciboId, setReciboId] = useState<string | null>(null)
@@ -37,8 +40,8 @@ export default function InformePage() {
       try {
         const token = await obtenerToken()
         const h = { Authorization: `Bearer ${token}` }
-        const urls = ['/api/movimientos', '/api/alquileres', '/api/deudas', '/api/propiedades', '/api/unidades', '/api/familia', '/api/pendientes']
-        const [mov, alq, deu, prop, uni, fam, pen] = await Promise.all(urls.map((u) => fetch(u, { headers: h }).then((r) => r.json())))
+        const urls = ['/api/movimientos', '/api/alquileres', '/api/deudas', '/api/propiedades', '/api/unidades', '/api/familia', '/api/pendientes', '/api/configuracion']
+        const [mov, alq, deu, prop, uni, fam, pen, conf] = await Promise.all(urls.map((u) => fetch(u, { headers: h }).then((r) => r.json())))
         setDatos({
           movimientos: mov.movimientos || [],
           alquileres: alq.alquileres || [],
@@ -48,16 +51,26 @@ export default function InformePage() {
           miembros: fam.miembros || [],
           pendientes: pen.pendientes || [],
         })
+        // Datos de cobro: los guardados en el servidor (compartidos por
+        // toda la familia). Si todavía no hay, se usan los que se habían
+        // cargado antes en este navegador.
+        let base: Partial<DatosPago> = conf?.datosCobro || {}
+        if (!conf?.datosCobro) {
+          try {
+            base = JSON.parse(localStorage.getItem(CLAVE_PAGO) || '{}')
+          } catch {
+            base = {}
+          }
+        }
+        setPago((p) => {
+          const n = { ...p, ...Object.fromEntries(Object.entries(base).filter(([k]) => k in p)) } as DatosPago
+          if (conf?.datosCobro) setPagoGuardado(n)
+          return n
+        })
       } catch (err: any) {
         setError(err.message || 'No se pudieron cargar los datos.')
       }
     })()
-    try {
-      const guardado = localStorage.getItem(CLAVE_PAGO)
-      if (guardado) setPago((p) => ({ ...p, ...JSON.parse(guardado) }))
-    } catch {
-      // sin datos guardados
-    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -84,14 +97,24 @@ export default function InformePage() {
   }, [liquidacion])
   const reciboActivo = cobros.find((x) => x.mov.id === reciboId)
 
-  function guardarPago(nuevo: DatosPago) {
-    setPago(nuevo)
+  async function guardarPagoEnServidor() {
+    setGuardandoPago(true)
+    setMsgPago('')
     try {
-      localStorage.setItem(CLAVE_PAGO, JSON.stringify(nuevo))
-    } catch {
-      // el navegador no deja guardar: se usa solo en esta sesión
+      const token = await obtenerToken()
+      const d = await fetch('/api/configuracion', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(pago),
+      }).then((r) => r.json())
+      if (d.error) return setMsgPago(d.error)
+      setPagoGuardado(pago)
+      setMsgPago('✓ Guardado. Toda la familia ve estos datos.')
+    } finally {
+      setGuardandoPago(false)
     }
   }
+  const pagoSinGuardar = JSON.stringify(pago) !== JSON.stringify(pagoGuardado)
 
   function imprimir(recibo?: string) {
     setReciboId(recibo || null)
@@ -168,10 +191,12 @@ export default function InformePage() {
         {vista === 'liquidacion' && editandoPago && (
           <div className="bg-panel border border-line rounded-xl p-4 mb-6">
             <div className="font-body text-sm font-semibold text-ink mb-1">Datos que salen en los avisos y recibos</div>
-            <div className="font-body text-[11px] text-inksoft mb-3">Quedan guardados en este navegador.</div>
+            <div className="font-body text-[11px] text-inksoft mb-3">Se guardan para {esPersonal ? 'tu espacio' : 'toda la familia'} y salen en el encabezado de cada aviso, en la firma de la liquidación y en los recibos. Mientras escribís, la vista de abajo se actualiza.</div>
             <div className="grid sm:grid-cols-2 gap-3">
               {([
-                ['administrador', 'Administra'],
+                ['nombreAdministracion', 'Nombre de la administración (ej. Administración Familia Rodríguez Estrada)'],
+                ['administrador', 'Quién administra (persona)'],
+                ['direccion', 'Dirección (opcional)'],
                 ['telefono', 'Teléfono de contacto'],
                 ['titular', 'Titular de la cuenta'],
                 ['banco', 'Banco'],
@@ -179,9 +204,16 @@ export default function InformePage() {
               ] as const).map(([k, t]) => (
                 <label key={k} className="font-body text-[11px] text-inksoft flex flex-col gap-1">
                   {t}
-                  <input value={pago[k]} onChange={(e) => guardarPago({ ...pago, [k]: e.target.value })} className="px-3 py-2 rounded-lg border border-line font-body text-sm text-ink" />
+                  <input value={pago[k]} onChange={(e) => { setPago({ ...pago, [k]: e.target.value }); setMsgPago('') }} className="px-3 py-2 rounded-lg border border-line font-body text-sm text-ink" />
                 </label>
               ))}
+            </div>
+            <div className="flex items-center gap-3 mt-3 flex-wrap">
+              <button onClick={guardarPagoEnServidor} disabled={guardandoPago || !pagoSinGuardar} className="min-h-[40px] px-4 rounded-lg bg-ink text-white font-body text-xs font-semibold disabled:opacity-50">
+                {guardandoPago ? 'Guardando...' : 'Guardar datos'}
+              </button>
+              {pagoSinGuardar && !msgPago && <span className="font-body text-[11px] text-[#6A5011]">Hay cambios sin guardar.</span>}
+              {msgPago && <span className={`font-body text-[11px] ${msgPago.startsWith('✓') ? 'text-verde' : 'text-rojo'}`}>{msgPago}</span>}
             </div>
           </div>
         )}

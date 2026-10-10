@@ -12,6 +12,8 @@ import { cuotaDelMes, esquemaDeAlquiler, esEscalonado, formatoBs } from '@/lib/e
 import { subirArchivo } from '@/lib/subirArchivo'
 import { resumirDeuda } from '@/lib/deudas'
 import { EditarAlquiler } from './_componentes/EditarAlquiler'
+import { RegistrarCobro } from '@/components/RegistrarCobro'
+import { estadoCuotas } from '@/lib/cobros'
 
 // Monto con el símbolo de la moneda del espacio activo.
 function bs(n: number) {
@@ -59,10 +61,10 @@ function AlquileresContenido() {
       resProp.json(), resUni.json(), resAlq.json(), resFam.json(), resMov.json(), resDeu.json(),
     ])
     setDeudas(dataDeu.deudas || [])
+    // Meses pagados COMPLETOS de cada alquiler (un pago parcial no cuenta).
     const cobrados: Record<string, Set<string>> = {}
-    for (const m of dataMov.movimientos || []) {
-      if (!m.alquilerId || !m.fecha) continue
-      ;(cobrados[m.alquilerId] ||= new Set()).add(String(m.fecha).slice(0, 7))
+    for (const a of dataAlq.alquileres || []) {
+      cobrados[a.id] = new Set(estadoCuotas(a, dataMov.movimientos || []).filter((c) => c.estado === 'pagada').map((c) => c.mes))
     }
     setMesesCobrados(cobrados)
     setPropiedades(dataProp.propiedades || [])
@@ -87,26 +89,6 @@ function AlquileresContenido() {
     })
     setUnidadSeleccionada('')
     cargar()
-  }
-
-  async function cobrarMes(alquilerId: string) {
-    setCobrando(alquilerId)
-    setMensajeCobro((m) => ({ ...m, [alquilerId]: '' }))
-    try {
-      const token = await obtenerToken()
-      const res = await fetch('/api/cobrar-alquiler', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ alquilerId, mes: mesActual() }),
-      })
-      const data = await res.json()
-      setMensajeCobro((m) => ({ ...m, [alquilerId]: data.error || `✓ Registrado como ingreso: ${data.texto || 'este mes'}.` }))
-      if (!data.error) {
-        setMesesCobrados((prev) => ({ ...prev, [alquilerId]: new Set([...Array.from(prev[alquilerId] || []), mesActual()]) }))
-      }
-    } finally {
-      setCobrando(null)
-    }
   }
 
   function abrirEditorPlan(a: any) {
@@ -289,8 +271,8 @@ function AlquileresContenido() {
                     <button onClick={() => { setEditando(null); editandoPlan === a.id ? setEditandoPlan(null) : abrirEditorPlan(a) }} className="font-body text-[11px] text-ink underline">
                       {editandoPlan === a.id ? 'Cerrar plan de pago' : 'Editar plan de pago'}
                     </button>
-                    <button onClick={() => cobrarMes(a.id)} disabled={cobrando === a.id} className="font-body text-[11px] text-verde underline disabled:opacity-50">
-                      {cobrando === a.id ? 'Registrando...' : '✓ Marcar cobrado este mes'}
+                    <button onClick={() => { setCobrando(cobrando === a.id ? null : a.id); setEditando(null); setEditandoPlan(null) }} className="font-body text-[11px] text-verde font-semibold underline">
+                      {cobrando === a.id ? 'Cerrar cobro' : '✓ Registrar cobro'}
                     </button>
                     <button onClick={() => finalizar(a.id, 'finalizado')} className="font-body text-[11px] text-inksoft underline">
                       Marcar finalizado
@@ -312,6 +294,21 @@ function AlquileresContenido() {
                     </a>
                   )
                 })}
+
+              {cobrando === a.id && (
+                <div className="mt-3 border border-line rounded-lg p-4 bg-panelalt/60">
+                  <RegistrarCobro
+                    alquilerIdInicial={a.id}
+                    bloquearAlquiler
+                    onCancelar={() => setCobrando(null)}
+                    onListo={(msg) => {
+                      setCobrando(null)
+                      setMensajeCobro((m) => ({ ...m, [a.id]: msg }))
+                      cargar()
+                    }}
+                  />
+                </div>
+              )}
 
               {editando === a.id && (
                 <EditarAlquiler

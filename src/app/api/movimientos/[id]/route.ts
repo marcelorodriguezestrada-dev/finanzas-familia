@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDb, requerirUsuarioAprobado } from '@/lib/firebaseAdmin'
+import { recalcularAlertaCobro } from '@/lib/alertasServidor'
+import { mesDeCobro } from '@/lib/cobros'
 import { espacioDe, docDelEspacio } from '@/lib/espacioServidor'
 
 export const dynamic = 'force-dynamic'
@@ -57,5 +59,11 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     if (p.exists && p.data()!.pago?.movimientoId === params.id) await refP.set({ estado: 'pendiente', pago: null }, { merge: true })
   }
   await db.collection('movimientos').doc(params.id).delete()
+  // Si era un cobro de alquiler, la alerta de pago parcial de ese mes
+  // (si hay) se recalcula: puede volver a abrirse o quedar anulada.
+  const dm = mov.exists ? mov.data()! : null
+  if (dm?.alquilerId && dm.tipo === 'ingreso') {
+    await recalcularAlertaCobro(dm.alquilerId, mesDeCobro(dm))
+  }
   return NextResponse.json({ ok: true })
 }

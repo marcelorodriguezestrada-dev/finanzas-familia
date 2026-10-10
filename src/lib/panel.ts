@@ -7,6 +7,7 @@
 import { redondear, etiquetaMes, generarCronograma, esquemaDeAlquiler, formatoBs, fechaCorta } from './esquemaPago'
 import { vencimientoVigente } from './pendientes'
 import { ordenarCuotas, CATEGORIA_COBRO_DEUDA } from './deudas'
+import { estadoCuotas } from './cobros'
 
 // Gastos que no dependen del día a día: llegan todos los meses.
 export const CATEGORIAS_FIJAS = ['Expensas', 'Servicios (luz, agua, gas, internet)', 'Impuestos', 'Educación']
@@ -103,13 +104,14 @@ export function armarPanel(
   }
   for (const a of d.alquileres || []) {
     if (a.estado !== 'activo' || !a.fechaInicio) continue
-    const esquema = esquemaDeAlquiler(a)
-    if (!esquema) continue
-    const cobrado = new Set(d.movimientos.filter((m) => m.alquilerId === a.id && m.tipo === 'ingreso').map((m) => String(m.fecha).slice(0, 7)))
-    const crono = generarCronograma({ fechaInicio: a.fechaInicio, fechaFin: a.fechaFin || null, diaCobro: a.diaCobro, esquema, proyectarHasta: hasta.slice(0, 7) })
-    for (const c of crono) {
-      if (c.mes < mesHoy || cobrado.has(c.mes) || c.vence > hasta) continue
-      eventos.push({ fecha: c.vence < hoy ? hoy : c.vence, concepto: `Alquiler ${a.inquilinoNombre} (${etiquetaMes(c.mes).toLowerCase()})`, monto: c.monto })
+    // Lo que falta cobrar de cada cuota (descuenta pagos parciales).
+    for (const c of estadoCuotas(a, d.movimientos, { hasta: hasta.slice(0, 7), hoy })) {
+      if (c.mes < mesHoy || c.pendiente <= 0.009 || c.vence > hasta) continue
+      eventos.push({
+        fecha: c.vence < hoy ? hoy : c.vence,
+        concepto: `Alquiler ${a.inquilinoNombre} (${etiquetaMes(c.mes).toLowerCase()}${c.estado === 'parcial' ? ', saldo' : ''})`,
+        monto: c.pendiente,
+      })
     }
   }
   for (const x of d.deudas || []) {

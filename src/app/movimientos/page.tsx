@@ -7,6 +7,7 @@ import { CATEGORIAS_GASTO, CATEGORIAS_INGRESO, mesActual } from '@/data/categori
 import { formatoBs } from '@/lib/esquemaPago'
 import { useEspacio } from '@/lib/espacioCliente'
 import { simboloDe } from '@/lib/monedas'
+import { RegistrarCobro } from '@/components/RegistrarCobro'
 
 // Monto con el símbolo de la moneda del espacio activo.
 function bs(n: number) {
@@ -62,6 +63,10 @@ export default function MovimientosPage() {
   const [fecha, setFecha] = useState(hoyISO())
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
+  const [mensaje, setMensaje] = useState('')
+  // Ingreso de alquiler: se carga con el formulario de cobro (inquilino,
+  // período y monto salen del contrato; admite pagos parciales).
+  const modoCobro = tipo === 'ingreso' && categoria === 'Alquiler'
 
   async function cargar() {
     setCargando(true)
@@ -84,6 +89,7 @@ export default function MovimientosPage() {
 
   async function agregar(e: React.FormEvent) {
     e.preventDefault()
+    if (modoCobro) return
     setError('')
     if (!monto || Number(monto) <= 0) {
       setError('Poné un monto válido.')
@@ -143,12 +149,30 @@ export default function MovimientosPage() {
           </button>
         </div>
 
+        {modoCobro ? (
+          <>
+            <div className="mb-3">
+              <select value={categoria} onChange={(e) => setCategoria(e.target.value)} className="w-full px-3.5 py-2.5 rounded-lg border border-line font-body text-sm bg-panel">
+                {CATEGORIAS_INGRESO.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+            <RegistrarCobro
+              onListo={(msg) => {
+                setMensaje(msg)
+                cargar()
+              }}
+            />
+          </>
+        ) : (
+          <>
         <div className="grid grid-cols-2 gap-3 mb-3">
           <input
             value={monto}
             onChange={(e) => setMonto(e.target.value)}
             type="number"
-            placeholder="Monto en Bs"
+            placeholder={`Monto en ${simboloDe(esPersonal ? perfil?.monedaPersonal || 'ARS' : 'BOB')}`}
             className="px-3.5 py-2.5 rounded-lg border border-line font-body text-sm"
           />
           <select
@@ -185,6 +209,9 @@ export default function MovimientosPage() {
         >
           {guardando ? 'Guardando...' : `Cargar ${tipo}`}
         </button>
+          </>
+        )}
+        {mensaje && <div className={`font-body text-xs mt-3 ${mensaje.startsWith('✓') ? 'text-verde' : 'text-rojo'}`}>{mensaje}</div>}
       </form>
 
       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
@@ -207,7 +234,12 @@ export default function MovimientosPage() {
         <div key={m.id} className="flex items-center justify-between py-2.5 border-b border-line">
           <div>
             <div className="font-body text-sm text-ink">{m.descripcion || m.categoria}</div>
-            <div className="font-body text-[11px] text-inksoft">{m.categoria} · {m.fecha} · {m.registradoPorNombre}</div>
+            <div className="font-body text-[11px] text-inksoft">
+              {m.categoria} · {m.fecha} · {m.registradoPorNombre}
+              {m.mesCuota && m.mesCuota !== String(m.fecha).slice(0, 7) ? ` · corresponde a ${m.mesCuota.slice(5)}/${m.mesCuota.slice(0, 4)}` : ''}
+              {m.medio ? ` · ${m.medio === 'qr' ? 'QR' : m.medio}` : ''}
+            </div>
+            {m.parcial && <div className="font-body text-[11px] text-[#8A5A0B] mt-0.5">⚠ Pago parcial{m.nota ? `: "${m.nota}"` : ''}</div>}
           </div>
           <div className="flex items-center gap-3">
             <div className={`font-body text-sm font-semibold ${m.tipo === 'ingreso' ? 'text-verde' : 'text-rojo'}`}>

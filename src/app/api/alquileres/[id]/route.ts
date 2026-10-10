@@ -12,6 +12,7 @@ const ETIQUETAS: Record<string, string> = {
   inquilinoDireccionAnterior: 'dirección anterior', diaCobro: 'día de pago', fechaInicio: 'fecha de inicio',
   fechaFin: 'fecha de fin', administradorUid: 'administrador', anticipo: 'anticipo', notas: 'notas',
   unidadId: 'departamento', estado: 'estado', esquemaPago: 'plan de pago', montoMensual: 'canon', contratoUrl: 'contrato',
+  seguimiento: 'seguimiento', proximaAccion: 'próxima acción', accionResponsable: 'responsable', accionFecha: 'fecha de la acción', accionHecha: 'acción hecha',
 }
 
 // PATCH — modifica un alquiler. Cada cambio queda anotado en
@@ -38,6 +39,17 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     for (const campo of ['inquilinoNombre', 'inquilinoCI', 'inquilinoTelefono', 'inquilinoDireccionAnterior', 'contratoUrl', 'notas']) {
       if (body[campo] !== undefined) cambios[campo] = typeof body[campo] === 'string' ? body[campo].trim() : body[campo]
     }
+    // Seguimiento (planilla de reuniones): estado de la situación, próxima
+    // acción, quién se encarga y para cuándo.
+    for (const campo of ['seguimiento', 'proximaAccion', 'accionResponsable']) {
+      if (body[campo] !== undefined) cambios[campo] = String(body[campo] || '').trim().slice(0, 1000)
+    }
+    if (body.accionFecha !== undefined) {
+      if (body.accionFecha && !FECHA.test(body.accionFecha)) return NextResponse.json({ error: 'Fecha de la acción no válida.' }, { status: 400 })
+      cambios.accionFecha = body.accionFecha || null
+    }
+    if (body.accionHecha !== undefined) cambios.accionHecha = !!body.accionHecha
+    if (cambios.proximaAccion !== undefined && cambios.proximaAccion !== (actual.proximaAccion || '')) cambios.accionHecha = false
     if (cambios.inquilinoNombre === '') return NextResponse.json({ error: 'El nombre del inquilino no puede quedar vacío.' }, { status: 400 })
 
     if (body.diaCobro !== undefined) {
@@ -123,6 +135,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (cambios.unidadId && actual.unidadId) await db.collection('unidades').doc(actual.unidadId).set({ estado: 'disponible' }, { merge: true })
     if (unidadFinal) await db.collection('unidades').doc(unidadFinal).set({ estado: estadoFinal === 'activo' ? 'alquilada' : 'disponible' }, { merge: true })
 
+    if (cambios.seguimiento !== undefined && cambios.seguimiento !== (actual.seguimiento || '') && cambios.seguimiento) {
+      cambios.historialSeguimiento = FieldValue.arrayUnion({ fecha: new Date().toISOString(), porNombre: chequeo.perfil.nombre, texto: cambios.seguimiento })
+    }
     cambios.historialCambios = FieldValue.arrayUnion({
       fecha: new Date().toISOString(),
       porUid: chequeo.usuario.uid,

@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { useAuth } from '@/lib/auth'
 import { Header } from './Header'
 
-export function PaginaProtegida({ children }: { children: React.ReactNode }) {
+export function PaginaProtegida({ children, ancho = false }: { children: React.ReactNode; ancho?: boolean }) {
   const { usuario, cargando } = useAuth()
 
   if (cargando) {
@@ -29,7 +29,7 @@ export function PaginaProtegida({ children }: { children: React.ReactNode }) {
     <div>
       <Header />
       <AvisoEspacioPersonal />
-      <div className="max-w-[880px] mx-auto px-5 py-8 print:max-w-none print:p-0">{children}</div>
+      <div className={`${ancho ? 'max-w-[1600px]' : 'max-w-[880px]'} mx-auto px-5 py-8 print:max-w-none print:p-0`}>{children}</div>
     </div>
   )
 }

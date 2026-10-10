@@ -12,6 +12,7 @@ const LINKS: { href: string; label: string; soloFamilia?: boolean }[] = [
   { href: '/movimientos', label: 'Ingresos y gastos' },
   { href: '/propiedades', label: 'Propiedades' },
   { href: '/alquileres', label: 'Alquileres' },
+  { href: '/planilla', label: 'Planilla' },
   { href: '/deudas', label: 'Deudas' },
   { href: '/pendientes', label: 'Por pagar' },
   { href: '/plantillas-contrato', label: 'Plantillas de contrato', soloFamilia: true },

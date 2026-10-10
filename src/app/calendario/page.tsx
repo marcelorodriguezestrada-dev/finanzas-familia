@@ -221,6 +221,33 @@ export default function CalendarioPage() {
             </>
           )}
 
+          {(() => {
+            // Acciones de seguimiento anotadas en la Planilla: vencidas o para los próximos 7 días.
+            const limite = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10)
+            const acciones = alquileres
+              .filter((a) => a.estado === 'activo' && a.proximaAccion && !a.accionHecha && a.accionFecha && a.accionFecha <= limite)
+              .sort((x, y) => String(x.accionFecha).localeCompare(String(y.accionFecha)))
+            if (!acciones.length) return null
+            const hoyTxt = new Date().toISOString().slice(0, 10)
+            return (
+              <>
+                <div className="font-body text-sm font-semibold text-ink mb-3 mt-8">
+                  Seguimiento pendiente ({acciones.length}) <a href="/planilla" className="font-normal text-[11px] text-inksoft underline">abrir planilla</a>
+                </div>
+                {acciones.map((a) => (
+                  <div key={a.id} className={`border rounded-lg p-3 mb-2 ${a.accionFecha < hoyTxt ? 'bg-rojosoft border-rojo' : 'border-line'}`}>
+                    <div className="font-body text-xs font-semibold text-ink">{a.proximaAccion}</div>
+                    <div className="font-body text-[11px] text-inksoft">
+                      {a.inquilinoNombre} · {nombrePropiedad(a.propiedadId)} — {nombreUnidad(a.unidadId)}
+                      {a.accionResponsable ? ` · a cargo de ${a.accionResponsable}` : ''} ·{' '}
+                      <span className={a.accionFecha < hoyTxt ? 'text-rojo font-semibold' : ''}>para el {a.accionFecha.slice(8, 10)}/{a.accionFecha.slice(5, 7)}</span>
+                    </div>
+                  </div>
+                ))}
+              </>
+            )
+          })()}
+
           <div className="font-body text-sm font-semibold text-ink mb-3 mt-8">
             Gastos por pagar (vencidos y próximos 7 días) <a href="/pendientes" className="font-normal text-[11px] text-inksoft underline">ver todos</a>
           </div>

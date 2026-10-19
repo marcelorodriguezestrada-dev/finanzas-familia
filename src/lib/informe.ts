@@ -76,13 +76,22 @@ export type Informe = {
   frase: string
 }
 
+// Filtro a medida (por ejemplo, solo lo que administra una persona):
+// reemplaza al de propiedad / soloInmuebles.
+export type FiltroInforme = {
+  movimiento: (m: any) => boolean
+  alquiler: (a: any) => boolean
+  deuda: (x: any) => boolean
+  pendiente: (p: any) => boolean
+}
+
 export function sumarMesClave(mes: string, n: number) {
   const [a, m] = mes.split('-').map(Number)
   const t = a * 12 + (m - 1) + n
   return `${Math.floor(t / 12)}-${String((t % 12) + 1).padStart(2, '0')}`
 }
 
-function ultimoDia(mes: string) {
+export function ultimoDia(mes: string) {
   const [a, m] = mes.split('-').map(Number)
   return `${mes}-${String(new Date(Date.UTC(a, m, 0)).getUTCDate()).padStart(2, '0')}`
 }
@@ -94,7 +103,7 @@ function diasEntre(desde: string, hasta: string) {
 const esIngreso = (m: any) => m.tipo === 'ingreso'
 const monto = (m: any) => Number(m.monto) || 0
 
-export function armarInforme(d: DatosInforme, mes: string, opts: { propiedadId?: string | null; soloInmuebles?: boolean; hoy?: string; personal?: boolean } = {}): Informe {
+export function armarInforme(d: DatosInforme, mes: string, opts: { propiedadId?: string | null; soloInmuebles?: boolean; hoy?: string; personal?: boolean; filtro?: FiltroInforme } = {}): Informe {
   const hoy = opts.hoy || new Date().toISOString().slice(0, 10)
   const inicio = `${mes}-01`
   const fin = ultimoDia(mes)
@@ -109,15 +118,18 @@ export function armarInforme(d: DatosInforme, mes: string, opts: { propiedadId?:
 
   // Filtro: la liquidación solo mira lo de los inmuebles (y de una
   // propiedad si se eligió); el informe simple mira todo.
+  const f = opts.filtro
   const movs = d.movimientos.filter((m) => {
+    if (f) return f.movimiento(m)
     if (propiedadId) return m.propiedadId === propiedadId
     if (opts.soloInmuebles) return !!m.propiedadId || !!m.alquilerId || !!m.deudaId
     return true
   })
-  const alquileres = d.alquileres.filter((a) => !propiedadId || a.propiedadId === propiedadId)
-  const deudas = d.deudas.filter((x) => x.estado !== 'anulada' && (!propiedadId || x.propiedadId === propiedadId))
+  const alquileres = d.alquileres.filter((a) => (f ? f.alquiler(a) : !propiedadId || a.propiedadId === propiedadId))
+  const deudas = d.deudas.filter((x) => x.estado !== 'anulada' && (f ? f.deuda(x) : !propiedadId || x.propiedadId === propiedadId))
   const pendientes = (d.pendientes || []).filter((p) => {
     if (p.estado !== 'pendiente') return false
+    if (f) return f.pendiente(p)
     if (propiedadId) return p.propiedadId === propiedadId
     if (opts.soloInmuebles) return !!p.propiedadId
     return true

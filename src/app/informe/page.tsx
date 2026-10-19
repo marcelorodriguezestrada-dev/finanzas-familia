@@ -9,9 +9,11 @@ import { etiquetaMes, formatoBs, fechaCorta } from '@/lib/esquemaPago'
 import { InformeSimple } from './_componentes/InformeSimple'
 import { Liquidacion, DatosPago } from './_componentes/Liquidacion'
 import { Recibo } from './_componentes/Recibo'
+import { InformeAdministrador } from './_componentes/InformeAdministrador'
+import { administradores, armarInformeAdministrador } from '@/lib/informeAdministrador'
 import { useEspacio } from '@/lib/espacioCliente'
 
-type Vista = 'simple' | 'liquidacion'
+type Vista = 'simple' | 'liquidacion' | 'administrador'
 const CLAVE_PAGO = 'informe:datosPago'
 
 // Informe mensual: la vista simple para toda la familia y la
@@ -27,6 +29,8 @@ export default function InformePage() {
   const [mes, setMes] = useState(sumarMesClave(mesActual(), -1))
   const [vista, setVista] = useState<Vista>('simple')
   const [propiedadId, setPropiedadId] = useState('')
+  // Informe por administrador: uno, o '' para todos (uno detrás de otro).
+  const [adminUid, setAdminUid] = useState('')
   const [pago, setPago] = useState<DatosPago>({ nombreAdministracion: '', administrador: '', direccion: '', telefono: '', titular: '', banco: '', cuenta: '' })
   const [pagoGuardado, setPagoGuardado] = useState<DatosPago | null>(null)
   const [guardandoPago, setGuardandoPago] = useState(false)
@@ -85,6 +89,12 @@ export default function InformePage() {
     () => (datos ? armarInforme(datos, mes, { propiedadId: propiedadId || null, soloInmuebles: true }) : null),
     [datos, mes, propiedadId]
   )
+
+  const admins = useMemo(() => (datos ? administradores(datos) : []), [datos])
+  const porAdministrador = useMemo(() => {
+    if (!datos || vista !== 'administrador') return []
+    return (adminUid ? admins.filter((a) => a.uid === adminUid) : admins).map((a) => armarInformeAdministrador(datos, mes, a.uid))
+  }, [datos, vista, mes, adminUid, admins])
 
   // Cobros de alquiler del mes, para emitir recibos.
   const cobros = useMemo(() => {
@@ -146,17 +156,31 @@ export default function InformePage() {
               ))}
             </select>
           </label>
-          <label className="font-body text-[11px] text-inksoft flex flex-col gap-1">
-            Propiedad
-            <select value={propiedadId} onChange={(e) => setPropiedadId(e.target.value)} className="min-h-[44px] px-3 rounded-lg border border-line bg-white font-body text-sm text-ink">
-              <option value="">Todas</option>
-              {(datos?.propiedades || []).map((p: any) => (
-                <option key={p.id} value={p.id}>{p.nombre}</option>
-              ))}
-            </select>
-          </label>
+          {vista === 'administrador' ? (
+            <label className="font-body text-[11px] text-inksoft flex flex-col gap-1">
+              Administra
+              <select value={adminUid} onChange={(e) => setAdminUid(e.target.value)} className="min-h-[44px] px-3 rounded-lg border border-line bg-white font-body text-sm text-ink">
+                <option value="">Todos (uno por persona)</option>
+                {admins.map((a) => (
+                  <option key={a.uid} value={a.uid}>{a.nombre}</option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            <label className="font-body text-[11px] text-inksoft flex flex-col gap-1">
+              Propiedad
+              <select value={propiedadId} onChange={(e) => setPropiedadId(e.target.value)} className="min-h-[44px] px-3 rounded-lg border border-line bg-white font-body text-sm text-ink">
+                <option value="">Todas</option>
+                {(datos?.propiedades || []).map((p: any) => (
+                  <option key={p.id} value={p.id}>{p.nombre}</option>
+                ))}
+              </select>
+            </label>
+          )}
           <div className="flex rounded-lg border border-line overflow-hidden" role="tablist" aria-label="Tipo de informe">
-            {([['simple', 'Informe simple'], ['liquidacion', 'Liquidación']] as const).map(([v, t]) => (
+            {((esPersonal
+              ? [['simple', 'Informe simple'], ['liquidacion', 'Liquidación']]
+              : [['simple', 'Informe simple'], ['liquidacion', 'Liquidación'], ['administrador', 'Por administrador']]) as [Vista, string][]).map(([v, t]) => (
               <button
                 key={v}
                 role="tab"
@@ -174,9 +198,9 @@ export default function InformePage() {
           <button onClick={() => imprimir()} disabled={!informe} className="min-h-[44px] px-4 rounded-lg bg-ink text-white font-body text-sm font-semibold disabled:opacity-50">
             Imprimir / guardar PDF
           </button>
-          <button onClick={enviarWhatsApp} disabled={!informe} className="min-h-[44px] px-4 rounded-lg bg-[#B3831F] text-[#1A1408] font-body text-sm font-bold disabled:opacity-50">
+          {vista !== 'administrador' && <button onClick={enviarWhatsApp} disabled={!informe} className="min-h-[44px] px-4 rounded-lg bg-[#B3831F] text-[#1A1408] font-body text-sm font-bold disabled:opacity-50">
             Enviar resumen por WhatsApp
-          </button>
+          </button>}
           {vista === 'liquidacion' && (
             <button onClick={() => setEditandoPago((v) => !v)} className="min-h-[44px] px-4 rounded-lg border border-line bg-white font-body text-sm text-ink">
               {editandoPago ? 'Cerrar datos de cobro' : 'Datos de cobro'}
@@ -220,7 +244,15 @@ export default function InformePage() {
       {/* Contenido: lo que se ve y lo que se imprime (salvo que se esté imprimiendo un recibo) */}
       {informe && liquidacion && (
         <div className={reciboActivo ? 'print:hidden' : ''}>
-          {vista === 'simple' ? <InformeSimple inf={informe} marca={esPersonal ? 'Mis finanzas' : 'Finanzas de la familia'} personal={esPersonal} /> : <Liquidacion inf={liquidacion} pago={pago} />}
+          {vista === 'simple' ? (
+            <InformeSimple inf={informe} marca={esPersonal ? 'Mis finanzas' : 'Finanzas de la familia'} personal={esPersonal} />
+          ) : vista === 'liquidacion' ? (
+            <Liquidacion inf={liquidacion} pago={pago} />
+          ) : porAdministrador.length === 0 ? (
+            <div className="font-body text-sm text-inksoft">Ningún alquiler tiene administrador asignado (Alquileres → ✎ Editar datos).</div>
+          ) : (
+            porAdministrador.map((a) => <InformeAdministrador key={a.uid} a={a} marca={pago.nombreAdministracion} />)
+          )}
 
           {vista === 'liquidacion' && (
             <div className="print:hidden mt-2 bg-panel border border-line rounded-xl p-4">
